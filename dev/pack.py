@@ -5,10 +5,12 @@ python dev/pack.py try      also puts the DLL in the mod folder, so the next gam
 python dev/pack.py source   takes the DLL out again, so the next game start compiles scripts/
 """
 
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import zipfile
 from pathlib import Path
 
@@ -17,6 +19,17 @@ BUILT = ["Eclipse.dll", "Eclipse.pdb"]
 KEPT = ["mod.toml"]
 # Only the DLL ships. The .pdb is for the try mode.
 SHIPPED = ["Eclipse.dll"]
+
+
+def check_manifest():
+    # Without the assembly line BmSDK only looks for scripts/, so a DLL-only install loads nothing.
+    toml = tomllib.loads((MOD / "mod.toml").read_text(encoding="utf-8"))
+    if toml.get("assembly") != "Eclipse.dll":
+        sys.exit('mod.toml needs assembly = "Eclipse.dll" or the release won\'t load.')
+    app = (MOD / "scripts" / "Core" / "App.cs").read_text(encoding="utf-8")
+    found = re.search(r'Version\s*=\s*"([^"]+)"', app)
+    if not found or found.group(1) != toml.get("version"):
+        sys.exit("The version in mod.toml and App.Version don't match.")
 
 
 def main():
@@ -29,6 +42,8 @@ def main():
             (MOD / name).unlink(missing_ok=True)
         print("The DLL is out. The game compiles scripts/ on its next start.")
         return
+
+    check_manifest()
 
     with tempfile.TemporaryDirectory() as out:
         out = Path(out)

@@ -4,7 +4,7 @@ namespace Trinity.Eclipse;
 
 internal static class App
 {
-    public const string Version = "2.0.0";
+    public const string Version = "2.0.1";
     private const float MaxStep = 0.25f;
 
     private static FrameTimer _tick, _draw;

@@ -57,11 +57,12 @@ in the mod folder, so updating the mod doesn't reset them.
 
 ## Install
 
-1. Install [BmSDK-AK](https://github.com/Team-BmSDK/BmSDK-AK) v0.21.0, then unzip the zip from the
-   [latest release of XeTrinityz/BmSDK-AK](https://github.com/XeTrinityz/BmSDK-AK/releases/latest) over the game
-   folder. Eclipse needs that fork's fixes and additions. On Epic, use the manual install for v0.21.0 since its
-   installer won't find the game.
-2. Put this folder in `Batman Arkham Knight/BmGame/Mods/` so you have `BmGame/Mods/Eclipse/mod.toml`.
+1. Install [XeTrinityz/BmSDK-AK v0.24.0](https://github.com/XeTrinityz/BmSDK-AK/releases/tag/v0.24.0) or newer.
+   Run its installer, or copy the `Binaries` and `BmGame` folders from its zip into your game folder. Older BmSDK
+   builds don't run Eclipse.
+2. Put the `Eclipse` folder from the zip in `Batman Arkham Knight/BmGame/Mods/` so you have
+   `BmGame/Mods/Eclipse/Eclipse.dll` and `BmGame/Mods/Eclipse/mod.toml`. When you update, copy both over the old
+   ones. Your settings stay. You can delete an old `scripts` folder in there. It isn't used any more.
 3. Start the game, load your save and press **J**.
 
 You can't fly in the Batmobile, during cutscenes or while you're knocked down.
