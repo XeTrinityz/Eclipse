@@ -39,6 +39,7 @@ internal sealed partial class Suit
 
     private void TakeOffFeel(RPawnPlayer pawn)
     {
+        Rumble.Play(Buzz.TakeOff);
         Puff(Fx.Dust, Feet(pawn));
         Sound(pawn, Fx.TakeOffSound);
     }
@@ -60,15 +61,17 @@ internal sealed partial class Suit
 
     private void SonicFeel(RPawnPlayer pawn)
     {
+        Rumble.Play(Buzz.Burst);
         Puff(Fx.Gust, pawn.Location, -_fm.Heading);
         Ring(Fx.Dust, pawn.Location, _fm.Heading);
-        Sound(pawn, Fx.SonicSound);
+        Sound(pawn, Fx.WaveSound);
         _fovKick = MathF.Max(_fovKick, 16f);
         _camKick = MathF.Max(_camKick, 1.2f);
     }
 
     private void SlamFeel(RPawnPlayer pawn, Vector3 at, float hard)
     {
+        Rumble.Play(Buzz.Slam);
         Puff(Fx.FloorSlam, at);
         Puff(Fx.Dust, at);
         Sound(pawn, Fx.SlamSound);
@@ -86,6 +89,7 @@ internal sealed partial class Suit
 
     private void LandFeel(RPawnPlayer pawn)
     {
+        Rumble.Play(Buzz.Land);
         Puff(Fx.Dust, Feet(pawn));
         Sound(pawn, Fx.LandSound);
     }
@@ -93,6 +97,7 @@ internal sealed partial class Suit
     // Flying into something that doesn't give. The view jolts and it bangs.
     private void CrashFeel(RPawnPlayer pawn, float lost, Vector3 dir)
     {
+        Rumble.Play(Buzz.Crash);
         // Not during a slam, a punch or a fly in, since those hit things on purpose.
         if (lost < CrashFrom || _slamming || _swing != null || Rushing || Clock.Now - _crashAt < CrashAgain)
             return;
@@ -106,11 +111,10 @@ internal sealed partial class Suit
             Thud(pawn, hard > 0.5f);
     }
 
-    // Wind rushes while in the dive pose, but not for a slam or a short fly in.
-    private void FeelStep(RPawnPlayer pawn) =>
-        RushSound(pawn, _autoFast == true && !_slamming && !Rushing && _swing == null);
+    // Flight has no wind loop. This only stops one left on from a super run.
+    private void FeelStep(RPawnPlayer pawn) => RushSound(pawn, false);
 
-    // The wind rushing past, for flight and the super run.
+    // The wind rushing past during the super run.
     private void RushSound(RPawnPlayer pawn, bool want)
     {
         want &= Opt.FlightSounds.On;
@@ -121,7 +125,7 @@ internal sealed partial class Suit
         {
             _rushOn = pawn;
             Shared.Set(RushKey, true);
-            Safe.Run("wind on", () => Fx.StartLoop(pawn, Fx.Rush));
+            Safe.Run("wind on", () => Fx.StartLoop(pawn, RunRush));
         }
         else
         {
@@ -133,7 +137,7 @@ internal sealed partial class Suit
     private void EndFeel()
     {
         if (_rushOn is { IsValid: true } on)
-            Safe.Run("wind off", () => Fx.StopLoop(on, Fx.Rush));
+            Safe.Run("wind off", () => Fx.StopLoop(on, RunRush));
         _rushOn = null;
         Shared.Set(RushKey, false);
     }
@@ -141,11 +145,8 @@ internal sealed partial class Suit
     // Scripts reloaded mid boost. Nothing else knows the wind is still on him.
     private static void RecoverRush()
     {
-        if (!Shared.GetValue(RushKey, false))
-            return;
-
         Shared.Set(RushKey, false);
         if (World.Player is { IsValid: true } pawn)
-            Fx.StopLoop(pawn, Fx.Rush);
+            Fx.StopAllLoops(pawn, RunRush);
     }
 }

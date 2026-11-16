@@ -520,6 +520,7 @@ internal sealed partial class Suit
     // A short slow motion on each hit, in real seconds. The game's combat slow mo froze thug AI.
     private static void HitStop(bool heavy)
     {
+        Rumble.Play(heavy ? Buzz.Heavy : Buzz.Hit);
         if (Opt.HitStop.On)
             Pace.Hold(HitStopKey, heavy ? SlowHeavy : SlowTap, heavy ? StopHeavy : StopTap);
     }

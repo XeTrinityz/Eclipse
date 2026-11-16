@@ -4,10 +4,10 @@ namespace Trinity.Eclipse;
 
 internal static class App
 {
-    public const string Version = "0.1.0";
+    public const string Version = "2.0.0";
     private const float MaxStep = 0.25f;
 
-    private static FrameTimer _tick;
+    private static FrameTimer _tick, _draw;
     private static bool _started;
     private static bool _inWorld;
 
@@ -30,7 +30,9 @@ internal static class App
         Safe.Run("game speed recover", Pace.Recover);
         Safe.Run("recover", Suit.I.Recover);
         Safe.Run("heavy body recover", Body.Recover);
-        Log.Info("Loaded. Fly key " + Bind.KeyName(Opt.FlyKey.Key) + ", menu key " + Bind.KeyName(Opt.MenuKey.Key) + ".");
+        Safe.Run("gadgets recover", NoGadgets.Recover);
+        Safe.Run("looks recover", Looks.Recover);
+        Log.Info("Loaded as " + Heroes.Name(Heroes.Active) + ", menu key " + Bind.KeyName(Opt.MenuKey.Key) + ".");
     }
 
     public static void Stop()
@@ -41,9 +43,12 @@ internal static class App
 
         Safe.Run("menu close", Menu.Close);
         Safe.Run("shutdown", Suit.I.Shutdown);
+        Safe.Run("gadgets back", NoGadgets.Release);
+        Safe.Run("looks back", Looks.Release);
         Safe.Run("heavy body off", Body.Forget);
         Safe.Run("camera restore", Hooks.Shutdown);
-        Pad.Shutdown();
+        Controls.Shutdown();
+        Rumble.Release();
         Shapes.Release();
         Settings.Flush();
         GameKeys.ReleaseAll();
@@ -53,6 +58,8 @@ internal static class App
     public static void EnterWorld()
     {
         World.Forget();
+        NoGadgets.Forget();
+        Looks.Forget();
         Safe.Run("world change", Suit.I.WorldChanged);
         Safe.Run("heavy body off", Body.Forget);
     }
@@ -61,6 +68,8 @@ internal static class App
     {
         Safe.Run("menu close", Menu.Close);
         World.Forget();
+        NoGadgets.Forget();
+        Looks.Forget();
         Safe.Run("heavy body off", Body.Forget);
     }
 
@@ -88,6 +97,9 @@ internal static class App
         if (World.InGame)
         {
             _inWorld = true;
+            Safe.Run("gadgets", NoGadgets.Step);
+            Safe.Run("looks", Looks.Step);
+            Safe.Run("hero keys", HeroKeys.Step);
             Safe.Run("suit tick", () => Suit.I.Tick(dt));
 
             // The camera update places it. This catches frames that don't run it, like in the Batmobile.
@@ -106,7 +118,7 @@ internal static class App
             return;
 
         World.Refresh();
-        Safe.Run("controller", Pad.Frame);
+        Safe.Run("controls", () => Controls.Frame(_draw.Step(MaxStep)));
         Safe.Run("fallback", Fallback.Frame);
         Safe.Run("overlay", () => Overlay.Draw(canvas));
     }

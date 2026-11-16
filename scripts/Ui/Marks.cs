@@ -88,13 +88,16 @@ internal static class Marks
 
     // Holding a thug, the punch key finishes him.
     private static string HoldHint(string thrown) =>
-        (Suit.I.HoldingThug ? Bind.KeyName(Opt.PunchKey.Key) + " FINISH   " : "") + Bind.KeyName(Opt.GrabKey.Key) + thrown;
+        (Suit.I.HoldingThug ? Said(Act.Punch) + " FINISH   " : "") + Said(Act.Grab) + thrown;
+
+    // The key or the button for a control, whichever is in use.
+    private static string Said(Act a) => Controls.Of(a) is { } c ? (Controls.PadActive ? Glyphs.Name(c.Button) : c.KeyLabel) : "";
 
     private static string Hint(Suit.Mark m)
     {
-        string punch = Bind.KeyName(Opt.PunchKey.Key) + " PUNCH, HOLD FOR HEAVY";
+        string punch = Said(Act.Punch) + " PUNCH, HOLD FOR HEAVY";
         if (Suit.I.Holding)
             return HoldHint(" THROW AT IT");
-        return punch + "   " + Bind.KeyName(Opt.GrabKey.Key) + " GRAB";
+        return punch + "   " + Said(Act.Grab) + " GRAB";
     }
 }

@@ -28,8 +28,8 @@ internal static class Overlay
         _menuAnim = _menuAnim < target ? Math.Min(target, _menuAnim + Gfx.Dt * speed) : Math.Max(target, _menuAnim - Gfx.Dt * speed);
 
         bool marks = Marks.Showing && _menuAnim <= 0f;
-        bool gauge = Gauge.Showing && _menuAnim <= 0f;
-        if (canvas == null || (!Readout.Showing && !marks && !gauge && _menuAnim <= 0f))
+        bool hud = Hud.Showing && _menuAnim <= 0f;
+        if (canvas == null || (!Readout.Showing && !marks && !hud && _menuAnim <= 0f))
             return;
 
         if (!Gfx.Begin(canvas, out Font? font))
@@ -40,8 +40,8 @@ internal static class Overlay
             Gfx.Alpha = 1f;
             if (marks)
                 Safe.Run("marks", () => Marks.Draw(canvas));
-            if (gauge)
-                Safe.Run("readout", Gauge.Draw);
+            if (hud)
+                Safe.Run("hud", () => Hud.Draw(canvas));
             if (_menuAnim > 0f)
                 Safe.Run("menu view", () => MenuView.Draw(_menuAnim));
             Gfx.Alpha = 1f;

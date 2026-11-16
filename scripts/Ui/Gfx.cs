@@ -70,6 +70,32 @@ internal static class Gfx
         Rect(x + w - t, y + t, t, h - t * 2f, col, alpha);
     }
 
+    // A see-through box leaning right by lean across its height, drawn in thin bands since only boxes can fade.
+    public static void Slant(float x, float y, float w, float h, float lean, Rgba col, float alpha = 1f)
+    {
+        float band = MathF.Max(1f, MathF.Round(S(2f)));
+        for (float yy = 0f; yy < h; yy += band)
+        {
+            float bh = MathF.Min(band, h - yy);
+            float shift = lean * (1f - (yy + bh * 0.5f) / h);
+            Rect(x + shift, y + yy, w, bh, col, alpha);
+        }
+    }
+
+    // A box with its corners cut off, top left and bottom right, see-through like Slant.
+    public static void Cut(float x, float y, float w, float h, float cut, Rgba col, float alpha = 1f)
+    {
+        float band = MathF.Max(1f, MathF.Round(S(2f)));
+        for (float yy = 0f; yy < h; yy += band)
+        {
+            float bh = MathF.Min(band, h - yy);
+            float mid = yy + bh * 0.5f;
+            float left = mid < cut ? cut - mid : 0f;
+            float right = mid > h - cut ? mid - (h - cut) : 0f;
+            Rect(x + left, y + yy, w - left - right, bh, col, alpha);
+        }
+    }
+
     public static float TextW(string text, float scale)
     {
         if (_widths.Count >= MaxCachedWidths)

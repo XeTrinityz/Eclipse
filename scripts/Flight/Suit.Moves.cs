@@ -25,7 +25,7 @@ internal sealed partial class Suit
     private static readonly Keys[] TapKeys = { Keys.W, Keys.A, Keys.S, Keys.D, Keys.Space, Keys.ControlKey };
 
     private readonly Dictionary<Keys, (bool Down, double Tapped)> _taps = new();
-    private readonly HashSet<string> _padWas = new();
+    private double _dropHeld = -1.0;
     private double _moveReady;
     private float _rollT = -1f, _rollWay;
     private double _landSince = -1.0;
@@ -33,14 +33,11 @@ internal sealed partial class Suit
     private void ResetMoves()
     {
         _taps.Clear();
-        _padWas.Clear();
         foreach (Keys key in TapKeys)
             _taps[key] = (Keyboard.IsDown(key), -1.0);
-        foreach (string name in new[] { "lb", "a", "b" })
-        {
-            if (Pad.Button(name))
-                _padWas.Add(name);
-        }
+        foreach (Act a in new[] { Act.Burst, Act.Drop, Act.Dash, Act.Roll, Act.Punch, Act.Grab })
+            Controls.Clear(a);
+        _dropHeld = -1.0;
 
         _moveReady = 0.0;
         _rollT = -1f;
@@ -73,15 +70,20 @@ internal sealed partial class Suit
         return hit;
     }
 
-    private bool PadPressed(string name)
+    // Holding the drop button on a pad lands him.
+    private const double PadLandHold = 0.45;
+
+    private bool PadLand()
     {
-        bool down = Pad.Button(name);
-        bool was = _padWas.Contains(name);
-        if (down)
-            _padWas.Add(name);
-        else
-            _padWas.Remove(name);
-        return down && !was;
+        if (!Controls.PadActive || !Controls.Down(Act.Drop))
+        {
+            _dropHeld = -1.0;
+            return false;
+        }
+
+        if (_dropHeld < 0.0)
+            _dropHeld = Clock.Now;
+        return !_slamming && Clock.Now - _dropHeld >= PadLandHold;
     }
 
     private void Moves(RPawnPlayer pawn, in FlightInput input)
@@ -94,9 +96,10 @@ internal sealed partial class Suit
 
         // Every key is read each frame so the taps stay in step.
         bool w = DoubleTap(Keys.W), a = DoubleTap(Keys.A), s = DoubleTap(Keys.S), d = DoubleTap(Keys.D);
-        bool up = DoubleTap(Keys.Space) || PadPressed("a");
-        bool down = DoubleTap(Keys.ControlKey) || PadPressed("b");
-        bool padDash = PadPressed("lb");
+        bool up = DoubleTap(Keys.Space) || Controls.Take(Act.Burst);
+        bool down = DoubleTap(Keys.ControlKey) || Controls.Take(Act.Drop);
+        bool padDash = Controls.Take(Act.Dash);
+        bool padRoll = Controls.Take(Act.Roll);
 
         if (_slamming || Clock.Now < _moveReady)
             return;
@@ -104,9 +107,9 @@ internal sealed partial class Suit
         bool fast = _autoFast == true;
         Vector3 fwd = Geo.Facing(input.Yaw), right = Geo.Facing(input.Yaw + 90f);
 
-        if (fast && (a || d))
+        if (fast && (a || d || padRoll))
         {
-            BarrelRoll(d ? 1f : -1f);
+            BarrelRoll(padRoll ? (input.Move.X < 0f ? -1f : 1f) : d ? 1f : -1f);
             return;
         }
 
@@ -210,6 +213,13 @@ internal sealed partial class Suit
     {
         if (SkimToRun(pawn, input))
             return true;
+
+        if (PadLand())
+        {
+            LandFeel(pawn);
+            End("LANDED", fall: true);
+            return true;
+        }
 
         bool settling = _autoFast != true && !_slamming && input.Lift < -0.5f && _ground < LandHeight;
         if (!settling)

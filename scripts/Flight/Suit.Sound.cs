@@ -28,7 +28,7 @@ internal sealed partial class Suit
             AkEvent? sound = heavy ? pawn.StrikeWoosh : pawn.StrikeWooshWeak;
             sound ??= pawn.StrikeWoosh;
             if (sound is { IsValid: true })
-                pawn.StartAudioEvent(sound, 0, 0);
+                pawn.StartAudioEvent(sound, default, 0);
         });
     }
 
@@ -43,9 +43,9 @@ internal sealed partial class Suit
         {
             if (FindThud() is not { IsValid: true } sound)
                 return;
-            pawn.StartAudioEvent(sound, 0, 0);
+            pawn.StartAudioEvent(sound, default, 0);
             if (heavy)
-                pawn.StartAudioEvent(sound, 0, 0);
+                pawn.StartAudioEvent(sound, default, 0);
         });
     }
 

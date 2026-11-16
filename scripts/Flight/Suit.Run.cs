@@ -22,6 +22,9 @@ internal sealed partial class Suit
     private const float SkidEnd = 150f;
     private const float RunStepUp = 40f;
     private const float RunDropLeast = 40f;
+    // Held under this speed by something in the way, the run gives up instead of running on the spot.
+    private const float RunStuckBelow = 300f;
+    private const float RunStuckSeconds = 0.25f;
     // His run cycle's own speed. Faster than that, the cycle is sped up to at most this many times.
     private const float RunAnimSpeed = 700f;
     private const float LegRateMost = 2.5f;
@@ -37,12 +40,15 @@ internal sealed partial class Suit
     private static readonly string[] RunStates = { "WalkingMode", "RunningMode" };
     private static readonly string[] SkidAnims = { "Slide_Floor_Stop" };
 
-    private bool _running, _skidding, _jumpWas, _slideOn, _camHandOff;
+    private bool _running, _skidding, _jumpWas, _camHandOff;
     private RPawnPlayer? _runPawn;
     private Vector3 _runHeading = Vector3.UnitX, _runAt;
-    private float _runSpeed, _runYaw, _runBank, _runVision, _animRateWas = 1f;
+    // Where a run last gave up against something. It won't start again pushing the same way from there.
+    private Vector3? _stuckSpot;
+    private Vector3 _stuckDir;
+    private float _runSpeed, _runYaw, _runBank, _runVision, _animRateWas = 1f, _stuckFor;
     private FrameTimer _runClock;
-    private Every _runDust;
+    private Every _runDust, _runBuzz;
 
     public bool Running => _running;
 
@@ -51,11 +57,26 @@ internal sealed partial class Suit
 
     private float RunTop => Opt.RunSpeed.Number * Metre;
 
-    private static bool RunHeld() => Keyboard.IsDown(Keys.ShiftKey) || Pad.Button("rb");
+    // On a pad the run stays on from the press until a skid, so only the stick has to be held.
+    private bool _padRun;
+
+    private bool RunHeld() => Keyboard.IsDown(Keys.ShiftKey) || _padRun;
+
+    // The run button on a pad. A second press while he runs lets go, like a skid.
+    public void PadRunPressed()
+    {
+        if (!CanRun)
+            return;
+        _padRun = !_padRun;
+        if (_padRun && !_running)
+            Readout.Toast("FLASH", "PUSH THE STICK TO RUN", true);
+    }
+
+    private static bool CanRun => Heroes.Is(Hero.Flash) && Opt.SuperRun.On;
 
     private static Vector2 RunInput()
     {
-        Vector2 ls = Pad.LeftStick;
+        Vector2 ls = Controls.LeftStick;
         return new Vector2(
             Math.Clamp(Axis(Keys.D, Keys.A) + ls.X, -1f, 1f),
             Math.Clamp(Axis(Keys.W, Keys.S) + ls.Y, -1f, 1f));
@@ -63,7 +84,7 @@ internal sealed partial class Suit
 
     private static RPawnPlayer? RunPawn()
     {
-        if (!Opt.Powers.On || !Opt.SuperRun.On || !World.Ready || World.Paused || World.Pc is not { } pc || Hooks.InCinematic(pc))
+        if (!CanRun || !World.Ready || World.Paused || World.Pc is not { } pc || Hooks.InCinematic(pc))
             return null;
         return World.Pawn is RPawnPlayer { Health: > 0, bHidden: false, bDeleteMe: false } pawn && pawn.DrivenVehicle is not { IsValid: true } ? pawn : null;
     }
@@ -80,14 +101,37 @@ internal sealed partial class Suit
     // On foot each frame. Starts the run when Shift is held and he's moving.
     private void RunWatch()
     {
-        if (!Listening || !RunHeld() || RunInput().LengthSquared() < 0.04f || RunPawn() is not { } pawn || World.Pc is not { } pc)
+        // A held run key would start the run again under the flurry, which then stops it as stuck.
+        if (!Listening || _flurry || _slowing || _rewinding || !RunHeld() || RunInput().LengthSquared() < 0.04f || RunPawn() is not { } pawn || World.Pc is not { } pc)
             return;
         if (pawn.Physics != Actor.EPhysics.PHYS_Walking || pawn.CurrentSpecialMove is { IsValid: true } || InFight(pc)
             || !RunStates.Contains(pc.GetStateName().ToString()))
             return;
+        if (StillStuck(pawn))
+            return;
 
         var v = new Vector3(pawn.Velocity.X, pawn.Velocity.Y, 0f);
         StartRun(pawn, pc, v.LengthSquared() > 1f ? v : Geo.Facing(pawn.Rotation.Yaw) * RunStartSpeed);
+    }
+
+    private bool StillStuck(RPawnPlayer pawn)
+    {
+        if (_stuckSpot is not { } spot)
+            return false;
+        Vector3 wish = WishDir(pawn);
+        if (Vector3.DistanceSquared(pawn.Location, spot) < 150f * 150f && Vector3.Dot(wish, _stuckDir) > 0.3f)
+            return true;
+        _stuckSpot = null;
+        return false;
+    }
+
+    // The way the keys or the stick push, flat, from the camera. Zero when nothing is pushed.
+    private static Vector3 WishDir(RPawnPlayer pawn)
+    {
+        Vector2 move = RunInput();
+        float yaw = Hooks.PlayerCam() is { } cam ? cam.CameraCache.POV.Rotation.Yaw : pawn.Rotation.Yaw;
+        Vector3 wish = Geo.Facing(yaw) * move.Y + Geo.Facing(yaw + 90f) * move.X;
+        return wish.LengthSquared() > 0.04f ? Vector3.Normalize(wish) : Vector3.Zero;
     }
 
     private void StartRun(RPawnPlayer pawn, RPlayerController pc, Vector3 velocity)
@@ -103,7 +147,9 @@ internal sealed partial class Suit
         _runBank = 0f;
         _runVision = 0f;
         _skidding = false;
-        _jumpWas = Keyboard.IsDown(Keys.Space) || Pad.Button("a");
+        _stuckFor = 0f;
+        _speedHeld = 0f;
+        _jumpWas = Keyboard.IsDown(Keys.Space);
 
         float below = Ground.Below(pawn, SkimHeight * 2f);
         if (below > 1f && below < SkimHeight * 2f)
@@ -127,16 +173,18 @@ internal sealed partial class Suit
         GameKeys.Hold("run", GameKeys.ButtonKeys);
         if (pawn.Mesh is { IsValid: true } mesh)
         {
-            _animRateWas = mesh.GlobalAnimRateScale > 0.01f ? mesh.GlobalAnimRateScale : 1f;
+            _animRateWas = SaneRate(mesh.GlobalAnimRateScale);
             Shared.Set(RunKey, BitConverter.SingleToInt32Bits(_animRateWas));
         }
 
         _runClock.Step(0.1f);
-        // Straight from flight the camera carries on as it was.
-        if (!_camHandOff)
+        // Straight from flight or a flurry the camera carries on as it was.
+        if (_ownCam)
+            _ownCam = false;
+        else if (!_camHandOff)
             StartView();
-        Sound(pawn, Fx.RunStartSound);
-        Puff(Fx.Dust, Feet(pawn) - _runHeading * 60f);
+        Sound(pawn, RunWhoosh);
+        FlashPuff(Fx.Dust, Feet(pawn) - _runHeading * 60f);
     }
 
     // From Frame, after the game has moved him this frame.
@@ -150,6 +198,18 @@ internal sealed partial class Suit
             return;
         }
 
+        // The game climbs, vaults and drops him by itself while he runs. He's left to it and runs on after.
+        if (InTraversal(pawn))
+        {
+            Traverse(pawn, dt);
+            return;
+        }
+
+        if (_traversing)
+            EndTraverse(pawn);
+        // Held for a moment, so a ledge that stops him dead doesn't cost the speed he had.
+        _speedHeld = MathF.Max(_runSpeed, _speedHeld - RunAccel * dt);
+
         if (pawn.CurrentSpecialMove is { IsValid: true } || !RunStates.Contains(pc.GetStateName().ToString())
             || Vector3.DistanceSquared(pawn.Location, _runAt) > MovedAway * MovedAway)
         {
@@ -162,7 +222,8 @@ internal sealed partial class Suit
         if (dt <= 0f)
             return;
 
-        if (Jumped())
+        // Superman launches into flight off a run. The Flash's jumps are the game's own, while he runs.
+        if (Jumped() && Heroes.Is(Hero.Superman))
         {
             Launch();
             return;
@@ -172,7 +233,9 @@ internal sealed partial class Suit
         if (!RunSpeedStep(pawn, pc, dt))
             return;
 
-        if (!RunPlace(pawn, pc, dt))
+        if (_tornado)
+            TornadoPlace(pawn, dt);
+        else if (!RunPlace(pawn, pc, dt))
             return;
 
         RunLook(pawn, pc, dt);
@@ -190,7 +253,8 @@ internal sealed partial class Suit
 
     private bool Jumped()
     {
-        bool down = Listening && (Keyboard.IsDown(Keys.Space) || Pad.Button("a"));
+        // Superman launches into flight off it, the Flash leaps.
+        bool down = Listening && Keyboard.IsDown(Keys.Space);
         bool pressed = down && !_jumpWas;
         _jumpWas = down;
         return pressed && !_skidding && _runSpeed > SkidFrom;
@@ -199,6 +263,10 @@ internal sealed partial class Suit
     // Speed and heading from the keys. False when the run is over.
     private bool RunSpeedStep(RPawnPlayer pawn, RPlayerController pc, float dt)
     {
+        if (TornadoStep(pawn))
+            return true;
+        if (Controls.Take(Act.Skid))
+            _padRun = false;
         Vector2 move = Listening ? RunInput() : Vector2.Zero;
         float yaw = Hooks.PlayerCam() is { } cam ? cam.CameraCache.POV.Rotation.Yaw : pawn.Rotation.Yaw;
         Vector3 wish = Geo.Facing(yaw) * move.Y + Geo.Facing(yaw + 90f) * move.X;
@@ -244,7 +312,6 @@ internal sealed partial class Suit
         if (_runSpeed > SkidEnd)
             return true;
 
-        Sound(pawn, Fx.SkidStopSound);
         EndRun(RunEnd.Stop);
         return false;
     }
@@ -297,15 +364,28 @@ internal sealed partial class Suit
         pawn.Move(-Vector3.UnitZ * drop);
         if (across.Z - pawn.Location.Z >= drop - 1f)
         {
-            // Nothing under him. Off he goes, at the speed he had.
+            // Nothing under him. Off he goes, at the speed he had, and on a pad the run picks up when he lands.
+            bool latched = _padRun;
             EndRun(RunEnd.Fall);
+            _padRun = latched;
             return false;
         }
 
         if (pawn.Physics != Actor.EPhysics.PHYS_Walking)
             pawn.SetPhysics(Actor.EPhysics.PHYS_Walking, false);
         _runAt = pawn.Location;
-        return true;
+
+        _stuckFor = !_skidding && _runSpeed < RunStuckBelow ? _stuckFor + dt : 0f;
+        if (_stuckFor < RunStuckSeconds)
+            return true;
+
+        // Pinned against something. He stops with a jolt.
+        _stuckSpot = pawn.Location;
+        _stuckDir = _runHeading;
+        Rumble.Play(Buzz.Crash);
+        _camKick = MathF.Max(_camKick, 0.6f);
+        EndRun(RunEnd.Stop);
+        return false;
     }
 
     // Faces the way he's running, leaning into turns, with his run cycle sped up to his speed.
@@ -343,7 +423,11 @@ internal sealed partial class Suit
         else
             Pace.Drop(RunPaceKey);
         if (was < 0.5f && _runVision >= 0.5f)
-            Sound(pawn, Fx.SonicSound);
+        {
+            // Its shockwave sound is in BoomFeel. The sonic burst's sound is the Batmobile's jump wind, a loop that
+            // never stops.
+            BoomFeel(pawn);
+        }
 
         // Sped up to match his speed and the world's slow down, so he looks normal in it.
         if (pawn.Mesh is { IsValid: true } mesh)
@@ -355,22 +439,21 @@ internal sealed partial class Suit
 
     private void RunFeel(RPawnPlayer pawn)
     {
-        RushSound(pawn, !_skidding && _runSpeed > RunTop * 0.4f);
         float every = _skidding ? 0.08f : 0.14f;
         if ((_skidding || _runSpeed > RunTop * 0.5f) && _runDust.Elapsed(every))
-            Puff(Fx.Dust, Feet(pawn) - _runHeading * (_skidding ? -40f : 60f));
+            FlashPuff(Fx.Dust, Feet(pawn) - _runHeading * (_skidding ? -40f : 60f));
+        if (!_skidding && _runSpeed > RunTop * 0.4f && _runBuzz.Elapsed(0.28))
+            Rumble.Play(_runSpeed > RunTop * 0.75f ? Buzz.RunFast : Buzz.Run);
+        FlashRunFx(pawn);
     }
 
     private void StartSkid(RPawnPlayer pawn)
     {
+        Rumble.Play(Buzz.Skid);
         _skidding = true;
         _runBank = 0f;
         Pace.Drop(RunPaceKey);
-        if (Opt.FlightSounds.On)
-        {
-            _slideOn = true;
-            Safe.Run("skid sound", () => Fx.StartLoop(pawn, Fx.SlideLoop));
-        }
+        Sound(pawn, SkidWhoosh);
 
         AnimSequence? seq = FindAnim(Rig.SkidAnim);
         foreach (string name in SkidAnims)
@@ -379,13 +462,7 @@ internal sealed partial class Suit
             Safe.Run("skid anim", () => PlayIntoStand(pawn, seq));
     }
 
-    private void EndSkid(RPawnPlayer? pawn)
-    {
-        _skidding = false;
-        if (_slideOn && pawn is { IsValid: true })
-            Safe.Run("skid sound", () => Fx.StopLoop(pawn, Fx.SlideLoop));
-        _slideOn = false;
-    }
+    private void EndSkid(RPawnPlayer? pawn) => _skidding = false;
 
     // Space at speed launches him into boost flight, keeping his speed and the camera.
     private void Launch()
@@ -414,7 +491,7 @@ internal sealed partial class Suit
     // Skimming the ground in boost flight with Ctrl held, he drops onto his feet into a run.
     private bool SkimToRun(RPawnPlayer pawn, in FlightInput input)
     {
-        if (!Opt.SuperRun.On || _autoFast != true || _slamming || Holding || Rushing || _swing != null || input.Lift > -0.5f
+        if (!CanRun || _autoFast != true || _slamming || Holding || Rushing || _swing != null || input.Lift > -0.5f
             || _ground > SkimHeight)
             return false;
         if (World.Pc is not { } pc)
@@ -449,8 +526,14 @@ internal sealed partial class Suit
 
     private void EndRun(RunEnd how)
     {
+        _padRun = false;
+        _traversing = false;
         if (!_running)
             return;
+
+        if (_tornado)
+            EndTornado(_runPawn);
+        FlashRunFxOff();
 
         RPawnPlayer? pawn = _runPawn is { IsValid: true, bDeleteMe: false } p ? p : null;
         EndSkid(pawn);

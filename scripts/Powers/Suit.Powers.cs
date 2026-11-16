@@ -23,14 +23,12 @@ internal sealed partial class Suit
     // Batman on his feet or flying, out of the Batmobile and not in a cutscene.
     private static RPawnPlayer? PowerPawn()
     {
-        if (!Opt.Powers.On || !World.InGame || World.Paused || World.Pc is not { } pc || Hooks.InCinematic(pc))
+        if (!Heroes.Is(Hero.Superman) || !World.InGame || World.Paused || World.Pc is not { } pc || Hooks.InCinematic(pc))
             return null;
         return World.Pawn is RPawnPlayer { Health: > 0, bHidden: false, bDeleteMe: false } pawn ? pawn : null;
     }
 
-    // R3 alone fires. LS and RS held together is the menu.
-    private static bool FireDown() =>
-        (Opt.FireKey.Key != Keys.None && Keyboard.IsDown(Opt.FireKey.Key)) || (Pad.Button("rs") && !Pad.Button("ls"));
+    private static bool FireDown() => Controls.Down(Act.Heat) || Controls.Down(Act.HeatAir);
 
     // From the game tick. The key, the hum and radio mode. The beams are placed in BeamStep.
     private void PowersStep()
@@ -94,8 +92,8 @@ internal sealed partial class Suit
     // The fire key is kept from the game while his powers can be used.
     private void KeepPowerKey()
     {
-        bool want = Opt.Powers.On && World.InGame && World.Pawn is RPawnPlayer;
-        Keys key = want ? Opt.FireKey.Key : Keys.None;
+        bool want = Heroes.Is(Hero.Superman) && World.InGame && World.Pawn is RPawnPlayer;
+        Keys key = want ? Controls.Key(Act.Heat) : Keys.None;
         if (key == _powerKey)
             return;
 

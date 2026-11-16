@@ -53,6 +53,54 @@ internal static unsafe class Shapes
             Flush(col with { A = 255 }, 1f);
     }
 
+    public static void FlushLines(Rgba col, float alpha)
+    {
+        if (_count > 0)
+            Flush(col, alpha);
+    }
+
+    public static void Line(float x0, float y0, float x1, float y1, float thick, Rgba col, float alpha = 1f)
+    {
+        AddLine(x0, y0, x1, y1, thick);
+        Flush(col, alpha);
+    }
+
+    // A closed outline through the points, given as x, y pairs.
+    public static void Loop(float thick, Rgba col, float alpha, params float[] xy)
+    {
+        int n = xy.Length / 2;
+        for (int i = 0; i < n; i++)
+        {
+            int j = (i + 1) % n;
+            AddLine(xy[i * 2], xy[i * 2 + 1], xy[j * 2], xy[j * 2 + 1], thick);
+        }
+
+        // Round joints, or thick corners show a notch.
+        if (thick >= 2f)
+        {
+            for (int i = 0; i < n; i++)
+                AddArc(xy[i * 2], xy[i * 2 + 1], 0f, thick * 0.5f, 0f, 360f);
+        }
+
+        Flush(col, alpha);
+    }
+
+    // A filled convex shape through the points, given as x, y pairs. Solid, like every triangle the game draws.
+    public static void Fill(Rgba col, float alpha, params float[] xy)
+    {
+        int n = xy.Length / 2;
+        for (int i = 1; i + 1 < n; i++)
+            AddQuad(xy[0], xy[1], xy[i * 2], xy[i * 2 + 1], xy[i * 2 + 2], xy[i * 2 + 3], xy[i * 2 + 2], xy[i * 2 + 3]);
+        Flush(col, alpha);
+    }
+
+    // A square turned on its corner, centred on cx, cy, reaching r from the middle.
+    public static void Diamond(float cx, float cy, float r, Rgba col, float alpha) =>
+        Fill(col, alpha, cx, cy - r, cx + r, cy, cx, cy + r, cx - r, cy);
+
+    public static void DiamondLine(float cx, float cy, float r, float thick, Rgba col, float alpha) =>
+        Loop(thick, col, alpha, cx, cy - r, cx + r, cy, cx, cy + r, cx - r, cy);
+
     private static bool Visible(Rgba col, float alpha) => col.A * alpha * Gfx.Alpha >= 0.5f;
 
     private static void AddArc(float cx, float cy, float r0, float r1, float a0, float a1)

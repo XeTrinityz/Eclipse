@@ -15,7 +15,7 @@ internal sealed partial class Suit
 
     private void FootFaceStep(float dt)
     {
-        if (!_firing || _flying || dt <= 0f || PowerPawn() is not { } pawn || World.Pc is not { } pc || Hooks.PlayerCam() is not { } cam
+        if (!(_firing || _bolt >= 0f) || _flying || _running || dt <= 0f || (PowerPawn() ?? FlashPawn()) is not { } pawn || World.Pc is not { } pc || Hooks.PlayerCam() is not { } cam
             || pawn.Physics != Actor.EPhysics.PHYS_Walking || pawn.CurrentSpecialMove is { IsValid: true }
             || !FacingStates.Contains(pc.GetStateName().ToString()))
         {

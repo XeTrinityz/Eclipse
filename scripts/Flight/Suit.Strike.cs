@@ -119,8 +119,8 @@ internal sealed partial class Suit
         _held = null;
         _throwing = false;
         ResetFight();
-        _punchWas = Keyboard.IsDown(Opt.PunchKey.Key) || Pad.Button("x");
-        _grabWas = Keyboard.IsDown(Opt.GrabKey.Key) || Pad.Button("y");
+        _punchWas = Controls.Down(Act.Punch);
+        _grabWas = Controls.Down(Act.Grab);
     }
 
     // Called with the flight's speed already worked out, so a rush or punch can take over.
@@ -130,8 +130,8 @@ internal sealed partial class Suit
             return;
 
         // Held state updates even with a menu open, so a menu click isn't a punch.
-        bool punchDown = Keyboard.IsDown(Opt.PunchKey.Key) || Pad.Button("x");
-        bool grabDown = Keyboard.IsDown(Opt.GrabKey.Key) || Pad.Button("y");
+        bool punchDown = Controls.Down(Act.Punch);
+        bool grabDown = Controls.Down(Act.Grab);
         bool punch = Listening && punchDown, grab = Listening && grabDown;
         bool punched = punch && !_punchWas, grabbed = grab && !_grabWas;
         _punchWas = punchDown;

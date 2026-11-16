@@ -1,4 +1,4 @@
 name = "Eclipse"
 author = "XeTrinityz"
-version = "1.0.0"
-description = "Super powers for Batman. He flies, runs at super speed, shrugs off hits and burns through thugs with heat vision. J to fly. WASD to move, Space up, Ctrl down. Hold Shift to boost, S brakes. Double tap a direction to dash. Boosting, double tap A or D to roll and W for a sonic burst. Double tap Ctrl from high up for a ground slam. Hold Shift on foot to super run, Space to launch into flight. He's heavy. Cars stop dead on him and he shoves them out of his way. Left click punches the thug or vehicle you aim at, hold for a heavy punch. Right click picks it up and throws it. Hold middle mouse for heat vision. F5 opens the menu, where the MOVES page lists everything."
+version = "2.0.0"
+description = "Two heroes for Batman. As Superman he flies, stops cars dead, punches them across the street and burns through thugs with heat vision. As the Flash he runs at super speed, throws lightning, blitzes a whole crowd, slows time and rewinds. Plays on keyboard or controller. Press F3 or hold the MENU button to pick a hero, change his controls and his suit."

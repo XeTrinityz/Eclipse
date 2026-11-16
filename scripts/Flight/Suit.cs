@@ -50,6 +50,21 @@ internal sealed partial class Suit
 
     public float AirHeight => _flying && _ground < GroundReach ? _ground : -1f;
 
+    // What he's doing in the air, for the HUD.
+    public string FlightWord => _slamming ? "SLAM" : _fm.Boosting ? "BOOST" : "HOVER";
+
+    // How far into speed vision the run is, 0 to 1.
+    public float VisionNow => _running ? _runVision : 0f;
+
+    // For the control legend: what the flight buttons do right now.
+    public bool FastPose => _flying && _autoFast == true;
+
+    public bool SlamReady => _flying && CanSlam;
+
+    public bool SonicReady => _flying && CanSonic;
+
+    public bool Firing => _firing;
+
     private static bool Listening => !Shared.AnyMenuOpen && Native.GameInFront() && !World.Paused;
 
     private RPawnPlayer? Held() =>
@@ -63,9 +78,9 @@ internal sealed partial class Suit
             return;
         }
 
-        if (!Opt.Powers.On)
+        if (!Heroes.Is(Hero.Superman))
         {
-            Readout.Toast(Title, "POWERS ARE OFF", false);
+            Readout.Toast(Title, Opt.Powers.On ? "ONLY SUPERMAN FLIES" : "POWERS ARE OFF", false);
             return;
         }
 
@@ -85,6 +100,7 @@ internal sealed partial class Suit
         if (_flying)
             Safe.Run("flight end", () => End("POWERS OFF", fall: true));
         Safe.Run("run end", () => EndRun(RunEnd.Stop));
+        Safe.Run("flash off", ResetFlash);
     }
 
     private static RPawnPlayer Require()
@@ -143,7 +159,7 @@ internal sealed partial class Suit
         ResetPoses();
 
         HoldFlightKeys();
-        Pad.HoldButtons = true;
+        Controls.HoldsChanged();
 
         // Keys held as flight starts never send their release, so clear them. Not otherwise, a run needs them.
         if (!_camHandOff && GameKeys.ButtonKeys.Any(Keyboard.IsDown))
@@ -177,7 +193,7 @@ internal sealed partial class Suit
 
     // Space, Ctrl, Shift and the punch and grab keys are kept from the game while he flies.
     private static void HoldFlightKeys() =>
-        GameKeys.Hold("flight", GameKeys.ButtonKeys.Concat(new[] { Opt.PunchKey.Key, Opt.GrabKey.Key }).Where(k => k != Keys.None).ToArray());
+        GameKeys.Hold("flight", GameKeys.ButtonKeys.Concat(new[] { Controls.Key(Act.Punch), Controls.Key(Act.Grab) }).Where(k => k != Keys.None).ToArray());
 
     // The game's movement off while he flies. It counts the asks, so each is given back once.
     private bool _noMove;
@@ -246,7 +262,7 @@ internal sealed partial class Suit
         }
         else
         {
-            if (_firing || _footFace)
+            if (_firing || _footFace || _bolt >= 0f)
                 Safe.Run("foot facing", () => FootFaceStep(dt));
             Safe.Run("run watch", RunWatch);
         }
@@ -261,6 +277,7 @@ internal sealed partial class Suit
         Safe.Run("invincible", GodStep);
         Safe.Run("game speed", Pace.Step);
         Safe.Run("powers", PowersStep);
+        Safe.Run("flash", FlashStep);
         Safe.Run("throws", ThrowStep);
         Safe.Run("landings", FlungStep);
         Safe.Run("car hits", WallStep);
@@ -354,13 +371,13 @@ internal sealed partial class Suit
         if (!Listening)
             return input;
 
-        Vector2 ls = Pad.LeftStick;
+        Vector2 ls = Controls.LeftStick;
         input.Move = new Vector2(
             Math.Clamp(Axis(Keys.D, Keys.A) + ls.X, -1f, 1f),
             Math.Clamp(Axis(Keys.W, Keys.S) + ls.Y, -1f, 1f));
-        input.Lift = Math.Clamp(Axis(Keys.Space, Keys.ControlKey) + Pad.RightTrigger - Pad.LeftTrigger, -1f, 1f);
+        input.Lift = Math.Clamp(Axis(Keys.Space, Keys.ControlKey) + Controls.RightTrigger - Controls.LeftTrigger, -1f, 1f);
         // A slam falls in the hover's way of flying, whatever is held.
-        input.Boost = !_slamming && (Keyboard.IsDown(Keys.ShiftKey) || Pad.Button("rb"));
+        input.Boost = !_slamming && (Keyboard.IsDown(Keys.ShiftKey) || Controls.Down(Act.Boost));
         return input;
     }
 
@@ -420,7 +437,7 @@ internal sealed partial class Suit
             Safe.Run("camera end", EndView);
         Safe.Run("flight keys", () => GameKeys.Release("flight"));
         Safe.Run("movement back", () => NoMove(World.Pc, false));
-        Pad.HoldButtons = false;
+        Controls.HoldsChanged();
 
         if (pawn != null)
             Safe.Run("flight release", () => Release(pawn, fall));
@@ -477,6 +494,8 @@ internal sealed partial class Suit
         Safe.Run("run end", () => EndRun(RunEnd.Stop));
         Safe.Run("passing off", EndPassing);
         Safe.Run("powers off", ResetPowers);
+        Safe.Run("flash off", ResetFlash);
+        Safe.Run("worn effects off", DropWorn);
         ResetTargets();
         Pace.Forget();
         _forceGlideUntil = -1.0;
@@ -487,11 +506,13 @@ internal sealed partial class Suit
         Safe.Run("radio off", EndRadio);
         Safe.Run("facing off", EndFootFace);
         Safe.Run("powers off", ResetPowers);
+        Safe.Run("flash off", ResetFlash);
         Safe.Run("game speed back", Pace.Reset);
         Safe.Run("invincible off", GodOff);
         Safe.Run("passing off", EndPassing);
         RestoreStep(World.Pawn as RPawnPlayer);
         Safe.Run("run end", () => EndRun(RunEnd.Stop));
+        Safe.Run("worn effects off", DropWorn);
         End("SCRIPTS UNLOADED", fall: true);
         if (World.Pc is { } pc)
             StopForcedGlide(pc);
@@ -509,6 +530,8 @@ internal sealed partial class Suit
         Safe.Run("facing recover", RecoverFacing);
         Safe.Run("wind recover", RecoverRush);
         Safe.Run("run recover", RecoverRun);
+        Safe.Run("blitz recover", RecoverBlitz);
+        Safe.Run("worn effects recover", RecoverWorn);
         if (Shared.GetValue(NoMoveKey, false))
         {
             Shared.Set(NoMoveKey, false);

@@ -195,15 +195,72 @@ internal sealed class Bind : Option
     };
 }
 
-internal sealed class Act : Option
+// A pick from a list the game gives at run time, like the suits the player has unlocked. A saved key that
+// isn't in the list right now is kept, so a suit from a DLC that's missing for a moment isn't lost.
+internal sealed class Listed : Option
+{
+    public string Key = "";
+    public string Blank = "";
+    public Func<List<(string Key, string Label)>> Source = () => new();
+    private List<(string Key, string Label)> _list = new();
+    private double _listedAt = double.NegativeInfinity;
+
+    // Asked again every couple of seconds at most, since reading it walks the game's lists.
+    private List<(string Key, string Label)> List()
+    {
+        if (Clock.Now - _listedAt > 2.0)
+        {
+            _listedAt = Clock.Now;
+            try
+            {
+                _list = Source();
+            }
+            catch (Exception ex)
+            {
+                Log.Error(Id + " list", "Listing " + Label, ex);
+            }
+        }
+
+        return _list;
+    }
+
+    public override string Value
+    {
+        get
+        {
+            List<(string Key, string Label)> list = List();
+            int at = list.FindIndex(e => e.Key.Equals(Key, StringComparison.OrdinalIgnoreCase));
+            return at >= 0 ? list[at].Label : Key.Length == 0 ? Blank : Key.Replace('_', ' ').ToUpperInvariant();
+        }
+    }
+
+    public override bool IsDefault => Key.Length == 0;
+
+    public override bool Step(int dir)
+    {
+        List<(string Key, string Label)> list = List();
+        if (list.Count < 2)
+            return false;
+        int at = Math.Max(0, list.FindIndex(e => e.Key.Equals(Key, StringComparison.OrdinalIgnoreCase)));
+        Key = list[(at + dir + list.Count) % list.Count].Key;
+        return true;
+    }
+
+    public override void Reset() => Key = "";
+
+    public override void Read(TomlTable table) => Key = table.TryGetValue(Id, out object? v) && v is string s ? s : "";
+
+    public override string Toml => "\"" + Key.Replace("\"", "") + "\"";
+}
+
+// A row that does something rather than holding a setting.
+internal sealed class Command : Option
 {
     public Action Run = () => { };
 
-    public Func<string>? Note;
-
     public bool Confirm;
 
-    public override string Value => Note?.Invoke() ?? "";
+    public override string Value => "";
 
     public override bool IsDefault => true;
 
@@ -240,4 +297,85 @@ internal sealed class Info : Option
     public override void Read(TomlTable table) { }
 
     public override string? Toml => null;
+}
+
+// Where a pad button counts: on foot (running too), anywhere, only in flight, or only in a super run.
+internal enum Use
+{
+    Foot,
+    Any,
+    Flight,
+    Run,
+}
+
+// One thing a hero can do, on a key and a pad button. Some keys are fixed moves like a double tap, so only
+// the button can change.
+internal sealed class Control : Option
+{
+    public Act For;
+    public Hero Hero;
+    public Use Use;
+    public Keys Key;
+    public Keys KeyDefault;
+    public string? KeyText;
+    public PadButton Button;
+    public PadButton ButtonDefault;
+
+    public bool KeyFixed => KeyText != null;
+
+    public string KeyLabel => KeyText ?? (Key == Keys.None ? "NONE" : Bind.KeyName(Key));
+
+    public string PadLabel => Button == PadButton.None ? "NONE" : Glyphs.Name(Button);
+
+    public override string Value => Controls.PadActive ? PadLabel : KeyLabel;
+
+    public override bool IsDefault => Key == KeyDefault && Button == ButtonDefault;
+
+    public override bool Step(int dir) => false;
+
+    public override bool Press() => false;
+
+    // The pad buttons this row can sit on. On foot the face buttons and LB stay the game's, and only the buttons
+    // Batman's gadgets used are free.
+    public bool Fits(PadButton b) => Use switch
+    {
+        Use.Foot => b is PadButton.RB or PadButton.RT or PadButton.LT or PadButton.Up or PadButton.Down or PadButton.Left or PadButton.Right,
+        Use.Any => b is PadButton.Up or PadButton.Down or PadButton.Left or PadButton.Right,
+        Use.Flight => b is PadButton.A or PadButton.B or PadButton.X or PadButton.Y or PadButton.LB or PadButton.RB or PadButton.LS or PadButton.RS,
+        _ => b is PadButton.A or PadButton.B or PadButton.X or PadButton.Y or PadButton.RB or PadButton.RT or PadButton.LT or PadButton.LS or PadButton.RS,
+    };
+
+    // Two rows clash when both can be pressed at the same time.
+    public bool Shares(Control other) => Use == other.Use || Use == Use.Any || other.Use == Use.Any;
+
+    public override void Reset()
+    {
+        Key = KeyDefault;
+        Button = ButtonDefault;
+    }
+
+    // Older versions saved a plain key name here.
+    public override void Read(TomlTable table)
+    {
+        Reset();
+        if (!table.TryGetValue(Id, out object? v))
+            return;
+
+        if (v is string old)
+        {
+            if (!KeyFixed && Enum.TryParse(old, true, out Keys k))
+                Key = k;
+            return;
+        }
+
+        if (v is not TomlTable t)
+            return;
+        // A key can't be cleared in the menu, so a saved NONE is from before the row had a default.
+        if (!KeyFixed && t.TryGetValue("key", out object? key) && key is string ks && Enum.TryParse(ks, true, out Keys parsed) && parsed != Keys.None)
+            Key = parsed;
+        if (t.TryGetValue("pad", out object? pad) && pad is string ps && Enum.TryParse(ps, true, out PadButton b) && (b == PadButton.None || Fits(b)))
+            Button = b;
+    }
+
+    public override string Toml => "{ key = \"" + Key + "\", pad = \"" + Button + "\" }";
 }

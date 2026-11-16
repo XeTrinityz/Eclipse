@@ -4,11 +4,11 @@ internal static class KeyInput
 {
     public static void Pressed(Keys key)
     {
-        Pad.KeyboardUsed();
+        Controls.KeyboardUsed();
 
         if (Menu.IsOpen)
         {
-            Menu.Press(key, false);
+            Menu.Press(key);
             return;
         }
 
@@ -21,10 +21,7 @@ internal static class KeyInput
             return;
         }
 
-        if (!World.InGame || World.Paused)
-            return;
-
-        if (key == Opt.FlyKey.Key)
-            Suit.I.Toggle();
+        if (World.InGame && !World.Paused)
+            Controls.KeyPressed(key);
     }
 }

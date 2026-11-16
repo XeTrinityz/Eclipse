@@ -172,6 +172,7 @@ internal static class Settings
         Pick p => string.Join(", ", p.Keys),
         Dial d => d.Format(d.Min) + " to " + d.Format(d.Max),
         Bind => "a key name",
+        Listed => "a suit's package name, empty for your own",
         _ => "true or false",
     };
 

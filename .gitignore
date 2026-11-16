@@ -1,16 +1,19 @@
 # Made by the mod on the player's machine, never shipped
 *.log
-Beyond.anims.txt
-Beyond.allanims.txt
-Beyond.thuganims.txt
-Beyond.sounds.txt
 settings.toml
+*.tmp
 
 # Build output from local compile checks
 bin/
 obj/
 *.csproj
+!dev/Eclipse.csproj
 *.sln
+
+# Release build, made by dev/pack.py
+Eclipse.dll
+Eclipse.pdb
+Eclipse.zip
 
 # OS and editor clutter
 Thumbs.db

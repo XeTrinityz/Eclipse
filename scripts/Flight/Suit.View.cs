@@ -28,11 +28,14 @@ internal sealed partial class Suit
     private FrameTimer _viewClock;
     private float _camDist, _camFov, _camRoll, _camFast, _fovKick, _camKick, _zoom;
     private float _camBlendIn, _camBlendOut;
+    private const float TwistPitch = -35f, TwistBack = 0.5f;
+    private float _twistCam;
     private Pov _camFrom, _camLast;
 
     private nint _pinCam;
     private bool _pinned;
     private int _minPitch, _maxPitch;
+    private bool _assistWas, _dragOffWas;
 
     private void StartView()
     {
@@ -61,17 +64,20 @@ internal sealed partial class Suit
         dt = Math.Clamp(dt, 0f, 0.1f);
         // Speed vision slows the game, so the run camera keeps real time.
         float real = _viewClock.Step(0.1f);
-        RPawnPlayer? pawn = _flying ? Held() : _running ? _runPawn : null;
+        RPawnPlayer? pawn = _flying ? Held() : _running ? _runPawn : _blitzing || _ownCam ? World.Player : null;
         if (pawn is not { IsValid: true } || !Opt.Camera.On)
         {
-            if (_flying || _running)
+            if (_flying || _running || _blitzing || _ownCam)
                 _camBlendOut = 0f;
             bool blended = BlendBack(game, ref pov, dt);
             return BeamCam(ref pov, World.Player, MathF.Max(dt, 1f / 120f)) || blended;
         }
 
         Pin(cam);
-        float step = MathF.Max(_running ? real : dt, 1f / 120f);
+        // While he marks targets ours follows him as normal. Once he strikes it goes up over the fight.
+        if (_blitzing && !_blitzAiming)
+            return BlitzView(game, ref pov, MathF.Max(real, 1f / 120f));
+        float step = MathF.Max(_running || _blitzing || _ownCam ? real : dt, 1f / 120f);
         float fastWant = _running
             ? Ease.Smooth(_runSpeed / MathF.Max(RunTop, 1f))
             : Ease.Smooth((_fm.Velocity.Length() - _fm.MoveSpeed) / MathF.Max(_fm.BoostSpeed - _fm.MoveSpeed, 1f));
@@ -80,14 +86,22 @@ internal sealed partial class Suit
         _camFast += (fastWant - _camFast) * Ease.Follow(3f, step);
         float fast = _camFast;
 
+        // In a tornado the view rises over the funnel and looks down into it.
+        _twistCam += ((_tornado ? 1f : 0f) - _twistCam) * Ease.Follow(3f, step);
         Rotator look = game.Rotation;
+        if (_twistCam > 0.001f)
+            look = new Rotator(Lerp(look.Pitch, TwistPitch, _twistCam), look.Yaw, look.Roll);
         Geo.Axes(new Rotator(look.Pitch, look.Yaw, 0f), out Vector3 fwd, out _, out _);
         Vector3 side = Geo.Facing(look.Yaw + 90f);
 
-        float dist = Lerp(Opt.CamDistance.Number, Opt.CamFastDistance.Number, fast) * Metre;
+        float dist = Lerp(Opt.CamDistance.Number, Opt.CamFastDistance.Number, fast) * Metre * (1f + TwistBack * _twistCam);
         _camDist = _camDist <= 0f || !_camReady ? dist : _camDist + (dist - _camDist) * Ease.Follow(4f, step);
 
-        Vector3 target = pawn.Location + Vector3.UnitZ * Lerp(CamShoulder, CamShoulderFast, fast) + side * (CamSide * (1f - fast));
+        // In a flurry his blows drift him off the spot he's pinned to every frame, so the view holds the spot.
+        Vector3 at = _flurry && _ownCam ? _flurrySpot : pawn.Location;
+        if (_twistCam > 0.001f)
+            at = Vector3.Lerp(at, new Vector3(_eye.X, _eye.Y, at.Z), _twistCam);
+        Vector3 target = at + Vector3.UnitZ * Lerp(CamShoulder, CamShoulderFast, fast) + side * (CamSide * (1f - fast));
         if (!_camReady)
         {
             _camPivot = target;
@@ -112,7 +126,7 @@ internal sealed partial class Suit
         _camFov = _camFov <= 0f ? fovWant : _camFov + (fovWant - _camFov) * Ease.Follow(3f, step);
 
         // Follows the turn bank only, or the barrel roll would spin the view.
-        float rollWant = _running ? _runBank * CamBankShare : _autoFast == true ? _lean.Y * CamBankShare : 0f;
+        float rollWant = _running ? _runBank * CamBankShare * (1f - _twistCam) : _autoFast == true ? _lean.Y * CamBankShare : 0f;
         _camRoll += (rollWant - _camRoll) * Ease.Follow(4f, step);
 
         Rotator rot = new(look.Pitch, look.Yaw, _camRoll);
@@ -211,9 +225,11 @@ internal sealed partial class Suit
 
     // The view the player sees. Ours while flying, so aiming matches the crosshair.
     private Pov ViewPov(R3rdPersonCamera cam) =>
-        (_flying || _running) && Opt.Camera.On && _camReady && _camLast.FOV > 1f ? _camLast : cam.CameraCache.POV;
+        (_flying || _running || _blitzing || _ownCam) && Opt.Camera.On && _camReady && _camLast.FOV > 1f ? _camLast : cam.CameraCache.POV;
 
-    // Lets him look nearly straight up and down while flying. The game's limits come back after.
+    // Lets him look nearly straight up and down while flying. On a pad the game also swings the camera after the
+    // way he moves (assist and drag), and since flight steers by the camera that turned the left stick into a
+    // second camera stick. Both are off while flying or running. The game's settings come back after.
     private void Pin(R3rdPersonCamera cam)
     {
         if (!_pinned || _pinCam != cam.Ptr)
@@ -222,7 +238,16 @@ internal sealed partial class Suit
             _pinCam = cam.Ptr;
             _minPitch = cam.MinPitch;
             _maxPitch = cam.maxPitch;
+            _assistWas = cam.EnableCameraAssist;
+            _dragOffWas = cam.bTemporarilyDisableCameraDrag;
         }
+
+        if (cam.EnableCameraAssist)
+            cam.EnableCameraAssist = false;
+        if (cam.CurrentCameraAssistStrength != 0f)
+            cam.CurrentCameraAssistStrength = 0f;
+        if (!cam.bTemporarilyDisableCameraDrag)
+            cam.bTemporarilyDisableCameraDrag = true;
 
         if (cam.MinPitch != -CamPitchLimit)
             cam.MinPitch = -CamPitchLimit;
@@ -244,6 +269,8 @@ internal sealed partial class Suit
                 cam.MinPitch = _minPitch;
             if (cam.maxPitch == CamPitchLimit)
                 cam.maxPitch = _maxPitch;
+            cam.EnableCameraAssist = _assistWas;
+            cam.bTemporarilyDisableCameraDrag = _dragOffWas;
         });
     }
 }

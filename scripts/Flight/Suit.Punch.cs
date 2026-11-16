@@ -36,6 +36,9 @@ internal sealed partial class Suit
     {
         if (_forcing is { } thug && thug.Ptr == self.Ptr)
             return true;
+        // A thug in a flurry or in slow time stays on his feet until his hits land.
+        if (I.Holds(self))
+            return false;
 
         return self.ShouldGoRagdoll(dmgType, damageAmount);
     }
@@ -45,6 +48,8 @@ internal sealed partial class Suit
     {
         if (_forcing is { } thug && thug.Ptr == self.Ptr)
             return true;
+        if (I.Holds(self))
+            return false;
 
         return self.ShouldGoRagdollWhenHitByBaseballBat();
     }
@@ -52,6 +57,29 @@ internal sealed partial class Suit
     [Redirect(typeof(RPawnVillain), nameof(RPawnVillain.DamagedBy))]
     private static RPawnCombat.DamageResult VillainDamagedByRedirect(RPawnVillain self, RPawnCombat.FDamageInfo info)
     {
+        // A thug in a flurry takes nothing until the last hit. Some hits arrive as heavy bat hits and the first one
+        // would launch him before the flurry has started. In slow time his hits are kept for when it ends.
+        if (I.Holds(self))
+        {
+            if (I.Slowing && IsBatman(info.Attacker))
+                I.KeepHit(self);
+            info.DamageAmount = 0;
+            info.Impulse = Vector3.Zero;
+            info.ForceHitReactionHeading = Vector3.Zero;
+            info.DamageType = RDmgType_Strike.StaticClass();
+            info.bHeavyHit = false;
+            info.bWillKnockOverOtherPawns = false;
+            info.RagdollForce = Vector3.Zero;
+            info.RagdollForceDuration = 0f;
+            if (I.FlurryHolds(self))
+            {
+                self.bNeverRagdollWhenHit = true;
+                self.bAlwaysRagdollWhenHit = false;
+            }
+
+            return self.DamagedBy(info);
+        }
+
         Vector3 launch = Vector3.Zero;
         try
         {
@@ -92,7 +120,7 @@ internal sealed partial class Suit
         away.Z = 0f;
         Vector3 dir = away.LengthSquared() > 1f ? Vector3.Normalize(away) : Geo.Facing(batman.Rotation.Yaw);
         Vector3 up = dir + Vector3.UnitZ * PunchUp;
-        Vector3 push = up * (PunchPush * Opt.PunchForce.Number);
+        Vector3 push = up * (PunchPush * Opt.PunchForceNow);
 
         // Keep a harder push the hit already had, like the ram's at speed.
         if (info.Impulse.LengthSquared() > push.LengthSquared())

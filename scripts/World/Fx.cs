@@ -30,7 +30,6 @@ internal static class Fx
     public const string BoostSound = "Ww_CHR_BatmanFoleyCape.Play_BM_CAPE_GLIDE_BOOST_IN";
     public const string MoveSound = "Ww_CHR_BatmanMovementFoley.Play_Batman_Cape_Turn";
     public const string DiveSound = "Ww_CHR_BatmanMovementFoley.Play_Batman_Cape_Dive";
-    public const string SonicSound = "Ww_BML_Batmobile_Subjective.Play_Batmobile_Jump_Wind";
     // A body hitting the ground hard, and the concrete under it breaking up.
     public const string SlamSound = "Ww_CHR_Combat_Brute.Play_NPC_Brute_HitGround_ANIM";
     public const string SlamDebris = "Ww_OBJ_Dest_ConcreteStoneBrick.Play_Concrete_Impacts";
@@ -77,16 +76,29 @@ internal static class Fx
     }
 
     // Fixed to a bone, so it goes where the body goes.
-    public static void SpawnOn(string path, SkeletalMeshComponent mesh, FName bone)
+    public static ParticleSystemComponent? SpawnOn(string path, SkeletalMeshComponent mesh, FName bone)
     {
         if (Find(_systems, path) is { } system && Game.TryGetWorldInfo(out WorldInfo? world) && world?.MyEmitterPool is { IsValid: true } pool)
-            pool.SpawnEmitterMeshAttachment(system, mesh, bone, false, Vector3.Zero, default);
+            return pool.SpawnEmitterMeshAttachment(system, mesh, bone, false, Vector3.Zero, default);
+        return null;
+    }
+
+    // Stops an effect we hold and clears what it already drew.
+    public static void Kill(ParticleSystemComponent? fx)
+    {
+        if (fx is not { IsValid: true })
+            return;
+        Safe.Run("effect off", () =>
+        {
+            fx.DeactivateSystem();
+            fx.KillParticlesForced();
+        });
     }
 
     public static void Play(Actor on, string path)
     {
         if (on.IsValid && Find(_sounds, path) is { } sound)
-            on.StartAudioEvent(sound, 0, 0);
+            on.StartAudioEvent(sound, default, 0);
     }
 
     private static string StopOf(string play) => play.Replace(".Play_", ".Stop_");
@@ -98,7 +110,7 @@ internal static class Fx
             return;
 
         if (Find(_sounds, StopOf(path)) != null)
-            on.StartAudioEvent(sound, 0, 0);
+            on.StartAudioEvent(sound, default, 0);
         else
             on.AddLoopingAudioEvent(sound);
     }
@@ -111,6 +123,15 @@ internal static class Fx
         if (Find(_sounds, StopOf(path)) != null)
             Play(on, StopOf(path));
         else if (Find(_sounds, path) is { } sound)
+            on.RemoveLoopingAudioEvent(sound);
+    }
+
+    // Takes off every copy of a looping sound, since adding it again stacks another.
+    public static void StopAllLoops(Actor on, string path)
+    {
+        if (!on.IsValid || Find(_sounds, path) is not { } sound)
+            return;
+        for (int i = 0; i < 16 && on.HasLoopingAudioEvent(sound); i++)
             on.RemoveLoopingAudioEvent(sound);
     }
 
