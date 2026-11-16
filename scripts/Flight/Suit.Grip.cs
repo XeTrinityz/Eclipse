@@ -31,7 +31,8 @@ internal sealed partial class Suit
     private int _gripSetsWas = -1;
     private nint _gripPlaying;
 
-    // Where the thug sits in Batman's frame once settled. Snapped to the hand he chased it.
+    // Where his neck sits in his own frame once settled. He's then placed off the hand every frame, so he stays in
+    // the fist when Batman tilts, banks or dives. Measuring the neck every frame made him chase the hand.
     private Vector3? _gripLock;
     private (bool Collide, bool Block, bool Ignore) _gripCollide = (true, true, false);
     private string _gripLockKey = "";
@@ -41,6 +42,8 @@ internal sealed partial class Suit
     private const float GripStillBy = 1.5f;
     private const int GripStillFrames = 6;
     private const float GripSaneSide = 70f, GripSaneAhead = 90f;
+    // Where his neck can be from his own middle, in units.
+    private const float NeckSaneSide = 50f, NeckSaneLow = 20f, NeckSaneHigh = 140f;
 
     // A good lock for each thug model, kept for the session.
     private static readonly Dictionary<string, Vector3> _gripLocks = new();
@@ -214,20 +217,24 @@ internal sealed partial class Suit
         if (_gripLock == null && !_throwing && Clock.Now - _gripSince > lead && _gripLocks.TryGetValue(key, out Vector3 known))
             _gripLock = known;
 
-        if (_gripLock is { } locked)
-        {
-            Place(thug, pawn.Location + fwd * locked.X + right * locked.Y + Vector3.UnitZ * locked.Z, wantRot);
-            return;
-        }
-
         if (pawn.Mesh is { IsValid: true } hand && HandBone(hand, Rig.GripLeftHand) is { } handBone
             && thug.Mesh is { IsValid: true } body && NeckBone(body) is { } neck)
         {
             // Update his mesh and bones first, or the hand trails his movement.
             pawn.ForceUpdateComponents(false, false);
             hand.ForceSkelUpdate();
-            // Measure the neck in his own frame, or it swings away from the hand.
             Vector3 handAt = hand.GetBoneLocation(handBone, 0);
+            if (_gripLock is { } neckLocal)
+            {
+                Place(thug, handAt - FromFrame(neckLocal, wantRot) + nudge, wantRot);
+                return;
+            }
+
+            // His mesh catches up with where he was just put first. Read a frame behind, a quick move during the
+            // grab ended up in the offset and he hung off to the side for the rest of the hold.
+            thug.ForceUpdateComponents(false, false);
+            body.ForceSkelUpdate();
+            // Measure the neck in his own frame, or it swings away from the hand.
             Vector3 neckOff = Turned(body.GetBoneLocation(neck, 0) - thug.Location, thug.Rotation, wantRot);
             Vector3 spot = handAt - neckOff + nudge;
 
@@ -249,9 +256,16 @@ internal sealed partial class Suit
             {
                 // A spot far off to the side is a bad grab. Use it for this hold but don't keep it.
                 bool sane = MathF.Abs(local.Y) < GripSaneSide && local.X < GripSaneAhead;
-                _gripLock = local;
-                if (_gripStill >= GripStillFrames && sane)
-                    _gripLocks[key] = local;
+                // A neck that isn't over his middle is a bad reading. He keeps easing to the hand and it's tried again.
+                Vector3 neckHere = InFrame(neckOff, wantRot);
+                bool neckSane = MathF.Abs(neckHere.X) < NeckSaneSide && MathF.Abs(neckHere.Y) < NeckSaneSide
+                    && neckHere.Z > NeckSaneLow && neckHere.Z < NeckSaneHigh;
+                if (neckSane)
+                {
+                    _gripLock = neckHere;
+                    if (_gripStill >= GripStillFrames && sane)
+                        _gripLocks[key] = neckHere;
+                }
             }
         }
         else
@@ -293,6 +307,7 @@ internal sealed partial class Suit
         // He's already in hand, so no lunge at him.
         if (_swing is { } swing)
         {
+            swing.Held = true;
             swing.Lunge = 0f;
             swing.Dir = Look();
             _fm.Velocity = Vector3.Zero;
@@ -337,6 +352,19 @@ internal sealed partial class Suit
             thug.Move(spot - thug.Location);
 
         thug.SetRotation(rot);
+    }
+
+    // A world offset as along, across and up in a rotation's own frame, and back again.
+    private static Vector3 InFrame(Vector3 offset, Rotator rot)
+    {
+        Geo.Axes(rot, out Vector3 x, out Vector3 y, out Vector3 z);
+        return new Vector3(Vector3.Dot(offset, x), Vector3.Dot(offset, y), Vector3.Dot(offset, z));
+    }
+
+    private static Vector3 FromFrame(Vector3 local, Rotator rot)
+    {
+        Geo.Axes(rot, out Vector3 x, out Vector3 y, out Vector3 z);
+        return x * local.X + y * local.Y + z * local.Z;
     }
 
     // An offset in one rotation's frame, given in another's.

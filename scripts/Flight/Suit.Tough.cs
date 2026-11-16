@@ -15,23 +15,44 @@ internal sealed partial class Suit
 
     private static bool NoStun => Opt.NoStunOn;
 
-    // Only clear flags we set, since Oracle sets its own every tick.
+    // Damage to him is dropped in the redirects below and his health kept full. No game flag is used. With the
+    // game's god mode on, the city stopped sending thugs out on foot. GodOff clears the flags an older load set.
     private static void GodStep()
     {
-        bool want = Opt.InvincibleOn && World.InGame;
-        if (!want)
-        {
-            GodOff();
+        GodOff();
+        if (!Opt.InvincibleOn || !World.InGame)
             return;
+
+        if (World.Player is { } p && p.Health > 0 && p.Health < p.HealthMax)
+        {
+            p.Health = p.HealthMax;
+            p.HealthUpdated();
+        }
+    }
+
+    // Kill zones still kill, or he's left stuck out of bounds.
+    private static bool Invincible(Pawn self, Class? damageType) => Opt.InvincibleOn && IsBatman(self) && !KillZone(damageType);
+
+    private static bool KillZone(Class? damageType)
+    {
+        if (damageType is not { IsValid: true })
+            return false;
+        foreach (Class type in damageType.EnumerateSupersAndSelf())
+        {
+            if (type.Name.ToString() == "RDmgType_KillZone")
+                return true;
         }
 
-        Shared.Set(GodKey, true);
-        if (World.Pc is { } pc && !pc.bGodMode)
-            pc.bGodMode = true;
-        if (World.Cheats is { } cm && !cm.bIgnoreDamage)
-            cm.bIgnoreDamage = true;
-        if (World.Player is { } p && p.Health > 0 && p.Health < p.HealthMax)
-            p.Health = p.HealthMax;
+        return false;
+    }
+
+    // A hit in a fight lands with nothing on it.
+    [Redirect(typeof(RPawnPlayer), nameof(RPawnPlayer.DamagedBy))]
+    private static RPawnCombat.DamageResult PlayerDamagedByRedirect(RPawnPlayer self, RPawnCombat.FDamageInfo info)
+    {
+        if (Invincible(self, info.DamageType))
+            info.DamageAmount = 0;
+        return self.DamagedBy(info);
     }
 
     private static void GodOff()

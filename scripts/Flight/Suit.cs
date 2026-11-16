@@ -38,6 +38,8 @@ internal sealed partial class Suit
     private Every _reassert;
 
     private bool _forceGlideWas;
+    // RB takes off and boosts. The press that took off doesn't count as boost until it's let go.
+    private bool _boostWait;
     private const int BadFramesMost = 20;
     private int _badFrames;
 
@@ -156,6 +158,7 @@ internal sealed partial class Suit
         _lastAt = pawn.Location;
         _ground = Ground.Below(pawn, GroundReach);
         _flying = true;
+        _boostWait = true;
         ResetPoses();
 
         HoldFlightKeys();
@@ -193,7 +196,7 @@ internal sealed partial class Suit
 
     // Space, Ctrl, Shift and the punch and grab keys are kept from the game while he flies.
     private static void HoldFlightKeys() =>
-        GameKeys.Hold("flight", GameKeys.ButtonKeys.Concat(new[] { Controls.Key(Act.Punch), Controls.Key(Act.Grab) }).Where(k => k != Keys.None).ToArray());
+        GameKeys.Hold("flight", GameKeys.ButtonKeys.Concat(new[] { Controls.Key(Act.Punch), Controls.Key(Act.Grab), Controls.Key(Act.Dash), Controls.Key(Act.Roll) }).Where(k => k != Keys.None).ToArray());
 
     // The game's movement off while he flies. It counts the asks, so each is given back once.
     private bool _noMove;
@@ -346,10 +349,14 @@ internal sealed partial class Suit
         Drive(pawn, pc, dt);
         if (_slamming)
             SlamCheck(pawn, pc);
+        // The slam may have landed and ended the flight just now. Nothing after this may tilt him again.
+        if (!_flying)
+            return;
         OverlayStep(pawn);
         if (LandCheck(pawn, input))
             return;
         AutoPose(pawn);
+        BoostStep(pawn);
         Face(pawn, input, dt);
         FeelStep(pawn);
 
@@ -377,7 +384,10 @@ internal sealed partial class Suit
             Math.Clamp(Axis(Keys.W, Keys.S) + ls.Y, -1f, 1f));
         input.Lift = Math.Clamp(Axis(Keys.Space, Keys.ControlKey) + Controls.RightTrigger - Controls.LeftTrigger, -1f, 1f);
         // A slam falls in the hover's way of flying, whatever is held.
-        input.Boost = !_slamming && (Keyboard.IsDown(Keys.ShiftKey) || Controls.Down(Act.Boost));
+        bool padBoost = Controls.Down(Act.Boost);
+        if (!padBoost)
+            _boostWait = false;
+        input.Boost = !_slamming && (Keyboard.IsDown(Keys.ShiftKey) || (padBoost && !_boostWait));
         return input;
     }
 
@@ -433,6 +443,7 @@ internal sealed partial class Suit
         ResetSlam();
         Safe.Run("fight end", EndFight);
         Safe.Run("flight sounds off", EndFeel);
+        Safe.Run("boost off", EndBoost);
         if (!_camHandOff)
             Safe.Run("camera end", EndView);
         Safe.Run("flight keys", () => GameKeys.Release("flight"));
@@ -496,6 +507,7 @@ internal sealed partial class Suit
         Safe.Run("powers off", ResetPowers);
         Safe.Run("flash off", ResetFlash);
         Safe.Run("worn effects off", DropWorn);
+        Safe.Run("owned effects off", DropOwned);
         ResetTargets();
         Pace.Forget();
         _forceGlideUntil = -1.0;
@@ -513,6 +525,7 @@ internal sealed partial class Suit
         RestoreStep(World.Pawn as RPawnPlayer);
         Safe.Run("run end", () => EndRun(RunEnd.Stop));
         Safe.Run("worn effects off", DropWorn);
+        Safe.Run("owned effects off", DropOwned);
         End("SCRIPTS UNLOADED", fall: true);
         if (World.Pc is { } pc)
             StopForcedGlide(pc);
@@ -532,6 +545,8 @@ internal sealed partial class Suit
         Safe.Run("run recover", RecoverRun);
         Safe.Run("blitz recover", RecoverBlitz);
         Safe.Run("worn effects recover", RecoverWorn);
+        Safe.Run("owned effects recover", RecoverOwned);
+        Safe.Run("boost recover", RecoverBoost);
         if (Shared.GetValue(NoMoveKey, false))
         {
             Shared.Set(NoMoveKey, false);

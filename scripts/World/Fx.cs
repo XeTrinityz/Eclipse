@@ -26,7 +26,15 @@ internal static class Fx
     public const string SlideLoop = "Ww_CHR_BatmanBodySlide.Play_Batman_Bodyslide";
 
     public const string BurnSound = "Ww_VFX_Molotov.Play_Molotov_Fire_Small";
-    public const string TakeOffSound = "Ww_CHR_BatmanMovementFoley.Play_Batman_Glide_OneShot";
+    public const string TakeOffSound = "ww_sbj_jump_subj.Play_SBJ_Whoosh_Med02";
+    public const string QuickWhoosh = "Ww_CHR_Combat.Play_TD_Whoosh_Quick";
+    public const string SonicIn = "Ww_SBJ_Whoosh_2D.Play_SBJ_Whoosh_Tunnel_In";
+    public const string ChargeUp = "Ww_CHR_BatmanShockwaveUpgrade.Play_BatmanLandShockwave_ChargeUp";
+    public const string GrabWhoosh = "Ww_CHR_Combat.Play_TD_Whoosh_Slow";
+    public const string ThrowWhoosh = "Ww_CHR_Combat.Play_Strike_Whoosh03a_Stirong";
+    public const string CarCrash = "Ww_OBJ_Dest_MetalsVehicles.Play_Metal_Heavy_Break";
+    public const string RollWhoosh = "Ww_CHR_Combat.Play_TD_Whoosh02";
+    public const string LowWhoosh = "Ww_CHR_Combat.Play_TD_Whoosh_Low";
     public const string BoostSound = "Ww_CHR_BatmanFoleyCape.Play_BM_CAPE_GLIDE_BOOST_IN";
     public const string MoveSound = "Ww_CHR_BatmanMovementFoley.Play_Batman_Cape_Turn";
     public const string DiveSound = "Ww_CHR_BatmanMovementFoley.Play_Batman_Cape_Dive";
@@ -34,7 +42,7 @@ internal static class Fx
     public const string SlamSound = "Ww_CHR_Combat_Brute.Play_NPC_Brute_HitGround_ANIM";
     public const string SlamDebris = "Ww_OBJ_Dest_ConcreteStoneBrick.Play_Concrete_Impacts";
     public const string WaveSound = "Ww_CHR_Combat.Play_Shockwave";
-    public const string LandSound = "Ww_CHR_BatmanFoleyBelt.Play_BM_Gear_Glide_Boost_Land_a";
+    public const string LandSound = "Ww_CHR_Combat.Play_TD_Whoosh_Low";
     public const string RunStartSound = "Ww_CHR_BatmanFoleyCape.Play_BM_CAPE_SPRINT_BOOST";
     public const string SkidStopSound = "Ww_CHR_BatmanFootsteps.Play_BM_Footstep_Slidestop";
 
@@ -157,38 +165,24 @@ internal static class Fx
     }
 }
 
-// A laser held between two points. The effect is moved, turned and sized each time.
+// A laser held between two points, on a component he owns so a full effect pool can't skip or take it. The
+// effect is moved, turned and sized each time it's shown.
 internal sealed class FxBeam
 {
     private static readonly FName Length = new("BeamLength");
-    // Which beam each effect belongs to, since the pool can hand a freed one to the other beam.
-    private static readonly Dictionary<nint, FxBeam> Owners = new();
 
     private readonly string _path;
     private ParticleSystemComponent? _fx;
+    private Actor? _owner;
+    private bool _on;
 
     public FxBeam(string path) => _path = path;
 
-    // The pool can take back the beam when it's full, so check it's still ours.
-    private bool StillMine(ParticleSystemComponent fx) =>
-        fx.IsValid && !fx.bWasDeactivated && !fx.bWasCompleted
-        && fx.Template is { IsValid: true } template && Fx.System(_path) is { } system && template.Ptr == system.Ptr
-        && Owners.TryGetValue(fx.Ptr, out FxBeam? owner) && ReferenceEquals(owner, this);
+    public string Template => _path[(_path.LastIndexOf('.') + 1)..];
 
-    public void Show(Vector3 from, Vector3 to)
+    public void Show(Actor owner, Vector3 from, Vector3 to)
     {
-        if (_fx == null || !StillMine(_fx))
-        {
-            Forget();
-            _fx = Fx.Spawn(_path, from, to - from);
-            if (_fx != null)
-            {
-                _fx.SetAbsolute(true, true, true);
-                Owners[_fx.Ptr] = this;
-            }
-        }
-
-        if (_fx is not { } fx)
+        if (!Ready(owner) || _fx is not { } fx)
             return;
 
         float length = Vector3.Distance(from, to);
@@ -198,12 +192,17 @@ internal sealed class FxBeam
         // The laser has two beam emitters, the core and its glow.
         for (int i = 0; i < 2; i++)
             fx.SetBeamDistance(i, length);
+        if (_on)
+            return;
+
+        _on = true;
+        Safe.Run("beam on", () => fx.ActivateSystem(true, false));
     }
 
     public void Hide()
     {
-        // Killed outright, or it hangs in place. Not if the pool already took it.
-        if (_fx is { } fx && StillMine(fx))
+        // Killed outright, or it hangs in place.
+        if (_on && _fx is { IsValid: true } fx)
         {
             Safe.Run("beam off", () =>
             {
@@ -214,16 +213,44 @@ internal sealed class FxBeam
             });
         }
 
-        Forget();
+        _on = false;
     }
 
-    // A new world took the old one's effects with it.
-    public void Drop() => Forget();
-
-    private void Forget()
+    // Taken off him for good, when the world changes or the scripts unload.
+    public void Drop()
     {
-        if (_fx != null && Owners.TryGetValue(_fx.Ptr, out FxBeam? owner) && ReferenceEquals(owner, this))
-            Owners.Remove(_fx.Ptr);
+        ParticleSystemComponent? fx = _fx;
+        Actor? owner = _owner;
         _fx = null;
+        _owner = null;
+        _on = false;
+        if (fx is not { IsValid: true })
+            return;
+        Safe.Run("beam off", () =>
+        {
+            fx.DeactivateSystem();
+            if (owner is { IsValid: true })
+                owner.DetachComponent(fx);
+        });
+    }
+
+    private bool Ready(Actor owner)
+    {
+        if (_fx is { IsValid: true } && _owner is { IsValid: true } && _owner.Ptr == owner.Ptr)
+            return true;
+        Drop();
+        if (!owner.IsValid || Fx.System(_path) is not { } template)
+            return false;
+
+        Safe.Run("beam", () =>
+        {
+            var c = new ParticleSystemComponent(owner) { bAutoActivate = false };
+            c.SetTemplate(template);
+            owner.AttachComponent(c);
+            c.SetAbsolute(true, true, true);
+            _fx = c;
+            _owner = owner;
+        });
+        return _fx != null;
     }
 }

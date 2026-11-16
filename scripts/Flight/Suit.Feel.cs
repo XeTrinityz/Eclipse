@@ -17,17 +17,11 @@ internal sealed partial class Suit
     private Actor? _rushOn;
     private double _crashAt;
 
-    private static void Puff(string path, Vector3 at, Vector3 facing = default)
-    {
-        if (Opt.FlightFx.On && Fx.Room(PoolSpare))
-            Safe.Run("flight effect", () => Fx.Spawn(path, at, facing));
-    }
+    private void Puff(string path, Vector3 at, Vector3 facing = default) =>
+        Safe.Run("flight effect", () => Own(path, at, Fx.Facing(facing)));
 
-    private static void Ring(string path, Vector3 at, Vector3 across)
-    {
-        if (Opt.FlightFx.On && Fx.Room(PoolSpare))
-            Safe.Run("flight effect", () => Fx.Spawn(path, at, Fx.Across(across)));
-    }
+    private void Ring(string path, Vector3 at, Vector3 across) =>
+        Safe.Run("flight effect", () => Own(path, at, Fx.Across(across)));
 
     private static void Sound(Actor on, string path)
     {
@@ -42,6 +36,7 @@ internal sealed partial class Suit
         Rumble.Play(Buzz.TakeOff);
         Puff(Fx.Dust, Feet(pawn));
         Sound(pawn, Fx.TakeOffSound);
+        Sound(pawn, Fx.QuickWhoosh);
     }
 
     // The dive pose has just gone on.
@@ -53,18 +48,30 @@ internal sealed partial class Suit
     }
 
     // A dash, a roll, a burst up or a drop.
-    private void MoveFeel()
+    private void MoveFeel(string? whoosh)
     {
-        if (Held() is { } pawn)
-            Sound(pawn, Fx.MoveSound);
+        if (Held() is not { } pawn)
+            return;
+
+        Sound(pawn, Fx.MoveSound);
+        if (whoosh != null)
+            Sound(pawn, whoosh);
+        Rumble.Play(Buzz.Hit);
     }
+
+    private const float SonicAhead = 120f;
+    private const double SonicFlare = 0.5;
 
     private void SonicFeel(RPawnPlayer pawn)
     {
         Rumble.Play(Buzz.Burst);
         Puff(Fx.Gust, pawn.Location, -_fm.Heading);
         Ring(Fx.Dust, pawn.Location, _fm.Heading);
+        // A second ring out in front, so the burst reads as going somewhere.
+        Ring(Fx.Dust, pawn.Location + _fm.Heading * SonicAhead, _fm.Heading);
         Sound(pawn, Fx.WaveSound);
+        Sound(pawn, Fx.SonicIn);
+        _trailUntil = Clock.Now + SonicFlare;
         _fovKick = MathF.Max(_fovKick, 16f);
         _camKick = MathF.Max(_camKick, 1.2f);
     }
@@ -74,6 +81,7 @@ internal sealed partial class Suit
         Rumble.Play(Buzz.Slam);
         Puff(Fx.FloorSlam, at);
         Puff(Fx.Dust, at);
+        Ring(Fx.Dust, at + Vector3.UnitZ * 20f, Vector3.UnitZ);
         Sound(pawn, Fx.SlamSound);
         Sound(pawn, Fx.SlamDebris);
         _camKick = MathF.Max(_camKick, 2f + 2f * hard);
@@ -81,7 +89,7 @@ internal sealed partial class Suit
     }
 
     // A heavy punch's shockwave.
-    private static void WaveFeel(RPawnPlayer pawn, Vector3 at, Vector3 dir)
+    private void WaveFeel(RPawnPlayer pawn, Vector3 at, Vector3 dir)
     {
         Puff(Fx.Gust, at, dir);
         Sound(pawn, Fx.WaveSound);
@@ -92,6 +100,7 @@ internal sealed partial class Suit
         Rumble.Play(Buzz.Land);
         Puff(Fx.Dust, Feet(pawn));
         Sound(pawn, Fx.LandSound);
+        _camKick = MathF.Max(_camKick, 0.4f);
     }
 
     // Flying into something that doesn't give. The view jolts and it bangs.

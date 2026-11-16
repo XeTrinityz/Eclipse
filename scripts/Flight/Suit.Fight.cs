@@ -54,6 +54,8 @@ internal sealed partial class Suit
         public bool Heavy;
         // Throws the thug in his hand instead of hitting him.
         public bool Throw;
+        // On the thug in his hand, the finisher or the throw. He doesn't turn to follow him away.
+        public bool Held;
         public float Hard = 1f;
         public float Seconds;
         public float Lunge;
@@ -74,12 +76,16 @@ internal sealed partial class Suit
     private double _bufferedAt;
     private float _fightPitch, _zoomWant, _windCharge;
     private double _lastPunchAt = -1.0;
+    private bool _punchFull;
 
     // A punch is going, winding up, or just landed.
     private bool Brawling => _swing != null || _charging || Clock.Now - _lastPunchAt < 1.5;
     private static bool _jabbing;
 
     public float Charge => _flying && _charging ? _charge : 0f;
+
+    // The bracketed target is out of reach, so a punch flies him to it first.
+    public bool AimFar => _flying && _aim is { } aim && Held() is { } pawn && !InPunchReach(pawn, aim.Thing);
 
     // The ram leaves the thing he's punching alone.
     private bool IsFoe(Actor thing) => _swing is { Target: { } target } && target.Ptr == thing.Ptr;
@@ -171,6 +177,7 @@ internal sealed partial class Suit
         _charging = true;
         _charge = 0f;
         _chargeTick = now;
+        _punchFull = false;
         _lastHand = _lastHand == "Left" ? "Right" : "Left";
         PlayWind(pawn, _lastHand == "Left" ? "Right" : "Left");
     }
@@ -181,6 +188,11 @@ internal sealed partial class Suit
         float dt = (float)Math.Clamp(now - _chargeTick, 0.0, 0.1);
         _chargeTick = now;
         _charge = MathF.Min(1f, _charge + dt / (float)ChargeFull);
+        if (_charge >= 1f && !_punchFull)
+        {
+            _punchFull = true;
+            Sound(pawn, Fx.ChargeUp);
+        }
         // The strike runs up to its cocked frame as the charge fills, then holds there.
         if (_charge >= 1f)
             HoldWind();
@@ -355,17 +367,38 @@ internal sealed partial class Suit
         // The held thug goes where he's looking. The finisher has no shockwave.
         bool held = IsHeld(thing);
         if (held)
+        {
             dir = Look();
+            _threwAt = Clock.Now;
+        }
+
         LetGoFor(thing);
         Vector3 at = Box(thing).Centre;
-        Strike(pawn, pc, thing, s.Kind, dir, s.Heavy, s.Hard);
+        _hitDir = held ? dir : Vector3.Zero;
+        try
+        {
+            Strike(pawn, pc, thing, s.Kind, dir, s.Heavy, s.Hard);
+        }
+        finally
+        {
+            _hitDir = Vector3.Zero;
+        }
         if (s.Heavy && !held)
         {
             Shockwave(pawn, pc, thing, at, s.Hard, WaveRadius);
             WaveFeel(pawn, at, dir);
         }
 
-        _fm.Velocity = -dir * (StrikeRecoil * (s.Heavy ? 1.5f : 1f));
+        // Dust where the fist lands. A heavy punch throws a ring as well.
+        if (!held)
+        {
+            Puff(Fx.Dust, at, dir);
+            if (s.Heavy)
+                Ring(Fx.Dust, at, dir);
+        }
+
+        if (!held)
+            _fm.Velocity = -dir * (StrikeRecoil * (s.Heavy ? 1.5f : 1f));
         _camKick = MathF.Max(_camKick, s.Heavy ? 2.5f : 0.8f);
         HitStop(s.Heavy);
     }
@@ -454,7 +487,10 @@ internal sealed partial class Suit
 
         flung = true;
         RamThug(thug, pawn, pc, dir, force, 1f, thug.Location);
-        QueueThrow(thug, (dir + Vector3.UnitZ * PunchUp) * (StrikeThrow * hard * Opt.PunchForce.Number));
+        // Out of his hand, the thug goes straight down the aim, held there a little longer.
+        bool aimed = _hitDir != Vector3.Zero;
+        QueueThrow(thug, (aimed ? dir : dir + Vector3.UnitZ * PunchUp) * (StrikeThrow * hard * Opt.PunchForce.Number),
+            aimed ? HeldThrowFrames : ThrowFrames);
         HitSound(pawn, thug, finishing: true, heavy);
     }
 
@@ -533,6 +569,8 @@ internal sealed partial class Suit
     private bool FaceTarget(RPawnPlayer pawn, out float yaw)
     {
         yaw = 0f;
+        if (_swing is { Held: true })
+            return false;
         Actor? target = _swing?.Target ?? (_charging ? Aim?.Thing : null);
         if (target is not { IsValid: true, bDeleteMe: false })
             return false;

@@ -188,10 +188,14 @@ internal static class Opt
             "Hovering, a quick burst upwards. Boosting, it pulls his nose up.");
         Ctl(keys, h, Act.Drop, "drop", "DROP AND SLAM", Keys.None, "CTRL TWICE", PadButton.B, Use.Flight,
             "Close to the ground, a quick drop. Boosting, a dive. A few metres up or more, a ground slam. Hold it on a pad to land.");
-        Ctl(keys, h, Act.Dash, "dash", "DASH AND SONIC BURST", Keys.None, "W A S D TWICE", PadButton.LS, Use.Flight,
-            "Hovering, a dash the way you push. Boosting, a sonic burst past his top speed.");
-        Ctl(keys, h, Act.Roll, "roll", "BARREL ROLL", Keys.None, "A OR D TWICE", PadButton.RS, Use.Flight,
-            "Boosting, rolls him aside toward the stick.");
+        Ctl(keys, h, Act.Dash, "dash", "DASH AND SONIC BURST", Keys.Q, null, PadButton.Up, Use.Flight,
+            "Hovering, a dash the way you push. Boosting, a sonic burst past his top speed. W A S D twice does it on keys too.", PadButton.LS);
+        Ctl(keys, h, Act.SideLeft, "side_left", "SIDE LEFT", Keys.None, "A TWICE", PadButton.Left, Use.Flight,
+            "Hovering, a dash to the left. Boosting, a barrel roll to the left.");
+        Ctl(keys, h, Act.SideRight, "side_right", "SIDE RIGHT", Keys.None, "D TWICE", PadButton.Right, Use.Flight,
+            "Hovering, a dash to the right. Boosting, a barrel roll to the right.");
+        Ctl(keys, h, Act.Roll, "roll", "ROLL OR SIDE DASH", Keys.E, null, PadButton.None, Use.Flight,
+            "On keys, a barrel roll while boosting and a side dash while hovering, toward the way you push.", PadButton.RS);
     }
 
     private static void BuildFlash()
@@ -373,12 +377,12 @@ internal static class Opt
     private static Bind Add(Page page, string id, string label, Keys key, string help) =>
         Register(page, new Bind { Id = id, Label = label, Help = help, Key = key, Default = key });
 
-    private static void Ctl(Page page, Hero hero, Act act, string id, string label, Keys key, string? keyText, PadButton button, Use use, string help)
+    private static void Ctl(Page page, Hero hero, Act act, string id, string label, Keys key, string? keyText, PadButton button, Use use, string help, PadButton retired = PadButton.None)
     {
         Control c = Register(page, new Control
         {
             Id = id, Label = label, Help = help, For = act, Hero = hero, Use = use,
-            Key = key, KeyDefault = key, KeyText = keyText, Button = button, ButtonDefault = button,
+            Key = key, KeyDefault = key, KeyText = keyText, Button = button, ButtonDefault = button, Retired = retired,
         });
         if (!Binds.TryGetValue(hero, out Dictionary<Act, Control>? map))
             Binds[hero] = map = new Dictionary<Act, Control>();

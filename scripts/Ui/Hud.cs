@@ -70,6 +70,7 @@ internal static partial class Hud
             float top = ShieldGauge(bottom, _shown);
             if (_legend > 0.01f)
                 SupermanLegend(top - S(26f), _legend * _shown);
+            SupermanBanner();
         }
 
         Alpha = 1f;
@@ -93,6 +94,13 @@ internal static partial class Hud
             Spaced(tx, y + S(56f), Suit.I.Firing ? "HEAT VISION" : "ON FOOT", Suit.I.Firing ? Emblems.Cape : Emblems.Sky, 0.5f, 3f);
             return y;
         }
+
+        // His speed round the shield. It turns red past top speed in a sonic burst.
+        float cx = x + size * 0.5f, cy = y + size * 0.5f, ar = size * 0.62f;
+        float fast = Suit.I.GaugeSpeed / (Opt.BoostSpeed.Number * Metre);
+        Shapes.Arc(cx, cy, ar - S(5f), ar, 135f, 405f, Emblems.Sky, 0.18f);
+        if (fast > 0.002f)
+            Shapes.Arc(cx, cy, ar - S(5f), ar, 135f, 135f + 270f * MathF.Min(fast, 1f), fast > 1f ? Emblems.Cape : Emblems.Ice, 1f);
 
         float height = Suit.I.AirHeight;
         Reading(tx, y + S(22f), "HEIGHT", height >= 0f ? Fmt.Whole(height / Metre) : "--", "M");
@@ -122,7 +130,9 @@ internal static partial class Hud
             return;
 
         (float promptW, float labelW) = Widths(rows);
-        float x = S(48f), w = S(30f) + promptW + S(16f) + labelW + S(24f);
+        // The note at the end of a row, like seconds left on a lock.
+        float metaW = rows.Max(e => e.Meta.Length > 0 ? SpacedW(e.Meta, Label, 2f) + S(16f) : 0f);
+        float x = S(48f), w = S(30f) + promptW + S(16f) + labelW + metaW + S(24f);
         float y = bottom - rows.Count * S(RowH + RowGap);
         float slide = (1f - a) * -S(30f);
 
@@ -141,9 +151,51 @@ internal static partial class Hud
             Shapes.Diamond(rx + S(14f), cy, S(4.5f), e.Active ? Emblems.Cape : Emblems.Sky, on);
             Legend.Prompt(rx + S(30f), cy, e, Glyph, on);
             Spaced(rx + S(30f) + promptW + S(16f), cy - TextH(Label) * 0.5f, e.Label, e.Ready ? Emblems.Ice : Palette.Dim, Label, 2f);
+            if (e.Meta.Length > 0)
+                Spaced(rx + w - S(12f) - SpacedW(e.Meta, Label, 2f), cy - TextH(Label) * 0.5f, e.Meta, e.Short ? Emblems.Cape : Emblems.Sky, Label, 2f);
             y += S(RowH + RowGap);
         }
     }
+
+    // One banner up top for what he's in the middle of: a slam, a sonic burst, or something in his hands.
+    private static void SupermanBanner()
+    {
+        Suit s = Suit.I;
+        if (!s.Flying)
+            return;
+        if (s.Slamming)
+            ShieldBanner("GROUND SLAM", 1f, s.AirHeight >= 0f ? Fmt.Whole(s.AirHeight / Metre) + " M TO GO" : "");
+        else if (s.SurgeLeft > 0.01f)
+            ShieldBanner("SONIC BURST", s.SurgeLeft, "");
+        else if (s.Holding)
+            ShieldBanner("HOLDING", 1f, (s.HoldingThug ? Said(Act.Punch) + " FINISH   " : "") + Said(Act.Grab) + " THROW");
+    }
+
+    // Its name between cape red diamonds, a bar for the time left, and a line under it.
+    private static void ShieldBanner(string title, float left, string line)
+    {
+        Alpha = _shown;
+        // Below the game's compass and the markers that hang off it.
+        float cx = W * 0.5f, y = S(150f);
+        const string over = "SUPERMAN";
+        Spaced(cx - SpacedW(over, 0.42f, 6f) * 0.5f, y, over, Emblems.Sky, 0.42f, 6f);
+
+        float ty = y + S(24f);
+        float tw = SpacedW(title, 1.1f, 6f);
+        Spaced(cx - tw * 0.5f, ty, title, Emblems.Ice, 1.1f, 6f);
+        float dy = ty + TextH(1.1f) * 0.5f;
+        Shapes.Diamond(cx - tw * 0.5f - S(22f), dy, S(6f), Emblems.Cape, 1f);
+        Shapes.Diamond(cx + tw * 0.5f + S(22f), dy, S(6f), Emblems.Cape, 1f);
+
+        float bw = S(420f), bx = cx - bw * 0.5f, by = ty + TextH(1.1f) + S(10f), bh = MathF.Max(2f, S(4f));
+        Rect(bx, by, bw, bh, Emblems.Sky, 0.25f);
+        Rect(bx, by, bw * Math.Clamp(left, 0f, 1f), bh, Emblems.Ice, 0.9f);
+        if (line.Length > 0)
+            Spaced(cx - SpacedW(line, 0.5f, 3f) * 0.5f, by + S(14f), line, Emblems.Sky, 0.5f, 3f);
+    }
+
+    // The key or the button for a control, whichever is in use.
+    private static string Said(Act a) => Controls.Of(a) is { } c ? (Controls.PadActive ? Glyphs.Name(c.Button) : c.KeyLabel) : "";
 
     private static (float Prompt, float Label) Widths(List<Entry> rows)
     {

@@ -35,6 +35,12 @@ internal static class Legend
         {
             Add(rows, map, Act.Fly, "TAKE OFF");
             Add(rows, map, Act.Heat, "HEAT VISION", active: s.Firing);
+            // His strength on foot works by itself. These rows only say so.
+            if (Opt.SuperPunchMode != "off")
+                rows.Add(new Entry(Opt.SuperPunch.Key == "knockouts" ? "KNOCKOUT PUNCHES LAUNCH" : "PUNCHES LAUNCH THUGS", "AUTO",
+                    Array.Empty<PadButton>(), "", true, false));
+            if (Opt.HeavyOn && Opt.RamOn)
+                rows.Add(new Entry("SHOVES CARS ASIDE", "AUTO", Array.Empty<PadButton>(), "", true, false));
             return;
         }
 
@@ -43,8 +49,10 @@ internal static class Legend
         rows.Add(new Entry("CLIMB AND SINK", "SPACE  CTRL", Triggers, "", true, false));
         Add(rows, map, Act.Burst, fast ? "PULL UP" : "BURST UP");
         Add(rows, map, Act.Drop, fast ? "DIVE" : s.SlamReady ? "GROUND SLAM" : "DROP");
-        Add(rows, map, Act.Dash, fast ? "SONIC BURST" : "DASH", ready: !fast || s.SonicReady);
-        Add(rows, map, Act.Roll, "BARREL ROLL", ready: fast);
+        Add(rows, map, Act.Dash, fast ? "SONIC BURST" : "DASH", ready: !fast || s.SonicReady,
+            meta: fast && !s.SonicReady ? Wait(s.SonicWait) ?? "" : "");
+        if (map.TryGetValue(Act.SideLeft, out Control? left) && map.TryGetValue(Act.SideRight, out Control? right) && map.TryGetValue(Act.Roll, out Control? roll))
+            rows.Add(new Entry(fast ? "BARREL ROLL" : "SIDE DASH", roll.KeyLabel, new[] { left.Button, right.Button }, "", true, false));
         if (map.TryGetValue(Act.Drop, out Control? drop))
             rows.Add(new Entry("LAND", Key(map, Act.Fly), new[] { drop.Button }, "HOLD", !fast, false));
         Add(rows, map, Act.Punch, s.HoldingThug ? "FINISH" : "PUNCH  HOLD FOR HEAVY");

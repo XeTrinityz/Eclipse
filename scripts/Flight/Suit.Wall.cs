@@ -200,12 +200,12 @@ internal sealed partial class Suit
         self.EncroachedBy(other);
     }
 
-    // A vehicle hurting him does nothing.
+    // A vehicle hurting him does nothing, and while he's invincible nothing does.
     [Redirect(typeof(RPawnPlayer), nameof(RPawnPlayer.TakeDamage))]
     private static void PlayerTakeDamageRedirect(RPawnPlayer self, int damage, Controller instigatedBy, Vector3 hitLocation, Vector3 momentum,
         Class damageType, Actor.FTraceHitInfo hitInfo, Actor damageCauser)
     {
-        if (Heavy && IsBatman(self) && FromVehicle(instigatedBy, damageCauser))
+        if (Invincible(self, damageType) || (Heavy && IsBatman(self) && FromVehicle(instigatedBy, damageCauser)))
             return;
 
         self.TakeDamage(damage, instigatedBy, hitLocation, momentum, damageType, hitInfo, damageCauser);

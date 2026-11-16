@@ -15,6 +15,9 @@ internal static class Rig
     public const string SlamLandAnim = "Glide_Boost_Land";
     // The glide landing skid, for stopping a super run.
     public const string SkidAnim = "Glide_Land_Skid";
+    // Landing out of the hover, soft and at speed.
+    public const string LandSoftAnim = "Glide_Land_Idle";
+    public const string LandSkidAnim = "Glide_Land_Skid";
     // Fingers at his cowl, from the radio set. For heat vision while hovering.
     public const string BeamAnim = "Stand_Idle_Radio_BM";
 

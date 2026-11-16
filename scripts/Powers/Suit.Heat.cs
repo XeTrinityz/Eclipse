@@ -81,11 +81,11 @@ internal sealed partial class Suit
 
         Actor? hit = BeamTarget(pawn, eye, look, out Vector3 end, out Vector3 normal, out bool landed);
         EyePoints(pawn, HeadAt(pawn), end, out Vector3 left, out Vector3 right);
-        _beamLeft.Show(left, end);
-        _beamRight.Show(right, end);
+        _beamLeft.Show(pawn, left, end);
+        _beamRight.Show(pawn, right, end);
 
-        if (landed && _sparks.Elapsed(SparkEvery) && Fx.Room(PoolSpare))
-            Fx.Spawn(Fx.BeamSparks, end, normal);
+        if (landed && _sparks.Elapsed(SparkEvery))
+            Own(Fx.BeamSparks, end, Fx.Facing(normal));
         // Fire only on a real trace hit where the beam has rested, never right by him.
         bool steady = landed && _endTraced && _lastLanded && Vector3.DistanceSquared(end, _lastEnd) < FireSteady * FireSteady;
         _lastLanded = landed && _endTraced;
@@ -105,7 +105,7 @@ internal sealed partial class Suit
             return;
 
         _fires.RemoveAll(f => f.Until < now);
-        if (_fires.Count >= FiresMost || !Fx.Room(PoolSpare))
+        if (_fires.Count >= FiresMost)
             return;
 
         foreach (var (other, _) in _fires)
@@ -114,7 +114,7 @@ internal sealed partial class Suit
                 return;
         }
 
-        if (Fx.Spawn(Fx.GroundFire, at) == null)
+        if (!Own(Fx.GroundFire, at, default, FiresMost))
             return;
 
         _fires.Add((at, now + FireSeconds));
@@ -275,7 +275,7 @@ internal sealed partial class Suit
                     break;
 
                 HitSound(pawn, thug, finishing: true, heavy: false);
-                Fx.Spawn(Fx.Ignite, Box(thug).Centre, -dir);
+                Own(Fx.Ignite, Box(thug).Centre, Fx.Facing(-dir));
                 if (thug.Mesh is { IsValid: true } body && FindBone(body, "chest", SpineBones, "Spine", "Pelvis") is { } spine)
                     Fx.SpawnOn(Fx.BodyFire, body, spine);
                 Fx.Play(thug, Fx.BurnSound);
@@ -289,12 +289,12 @@ internal sealed partial class Suit
 
             case RVehicle car:
                 car.TakeDamageFromWeapon(car.Health + 1, pc, at, dir * 2000f, Vector3.Zero, RDmgType_BatmobileCannon.StaticClass(), default, pawn, false);
-                Fx.Spawn(Fx.Fireball, Box(car).Centre);
+                Own(Fx.Fireball, Box(car).Centre, default);
                 break;
 
             case RAbandonedVehicle parked when parked.Health > 0:
                 parked.TakeDamage(parked.Health + 1, pc, at, dir * 2000f, RDmgType_BatmobileCannon.StaticClass(), default, pawn);
-                Fx.Spawn(Fx.Fireball, Box(parked).Centre);
+                Own(Fx.Fireball, Box(parked).Centre, default);
                 break;
 
             // Already wrecked. The beam shoves it along.
@@ -331,7 +331,7 @@ internal sealed partial class Suit
         if (!loud)
             return;
 
-        Fx.Spawn(Fx.BeamSparks, at, -dir);
+        Own(Fx.BeamSparks, at, Fx.Facing(-dir));
         Thud(pawn, heavy: false);
     }
 

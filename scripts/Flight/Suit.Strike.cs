@@ -295,6 +295,9 @@ internal sealed partial class Suit
         if (World.Player is not { } pawn)
             return;
 
+        Sound(pawn, Fx.GrabWhoosh);
+        Rumble.Play(Buzz.Hit);
+
         // A thug's grab runs into the hold. A car or object goes up over his head.
         if (thing is not RPawnVillain || (!PlayGrabInto(pawn, Move.Grab, Move.Neck) && !PlayMove(pawn, Move.Grab)))
             PlayMove(pawn, HoldMove);
@@ -368,15 +371,27 @@ internal sealed partial class Suit
                 ForceHitReactionHeading = v,
                 RagdollForce = v,
                 RagdollForceDuration = 0.25f,
-                ARF = RPawnCombat.AdditionalRagdollForce.ARF_HeadBackFeetUp,
+                // The game's extra fling pushes him away from Batman, not where you aim, so none here.
+                ARF = RPawnCombat.AdditionalRagdollForce.ARF_None,
                 DamageType = RDmgType_BaseballBat.StaticClass(),
                 bHeavyHit = true,
                 bWillKnockOverOtherPawns = true,
             };
-            Safe.Run("throw hit", () => thug.DamagedBy(info));
+            // The super punch on this hit would aim him away from Batman's side. It follows the throw instead.
+            _hitDir = v;
+            try
+            {
+                Safe.Run("throw hit", () => thug.DamagedBy(info));
+            }
+            finally
+            {
+                _hitDir = Vector3.Zero;
+            }
             if (!thug.IsRagdoll())
                 thug.GenericGoRagdoll();
-            QueueThrow(thug, v);
+            // Held to the aim for longer than a punch, so nothing knocks him off line as he leaves the hand.
+            QueueThrow(thug, v, HeldThrowFrames);
+            _threwAt = Clock.Now;
         }
         else
         {
@@ -395,6 +410,7 @@ internal sealed partial class Suit
             f.PushUntil = Clock.Now + ThrowPushFor;
         }
         _camKick = MathF.Max(_camKick, 0.5f);
+        Sound(pawn, Fx.ThrowWhoosh);
     }
 
     // What's under the aim dot, traced from past what he holds so it doesn't hit itself.
@@ -417,12 +433,12 @@ internal sealed partial class Suit
         _throwing = false;
     }
 
-    private static void QueueThrow(RPawnVillain thug, Vector3 speed)
+    private static void QueueThrow(RPawnVillain thug, Vector3 speed, int frames = ThrowFrames)
     {
         if (!thug.IsRagdoll())
             thug.GenericGoRagdoll();
         _throws.RemoveAll(t => t.Thug.Ptr == thug.Ptr);
-        _throws.Add(new Throw { Thug = thug, Speed = speed, Until = Clock.Now + ThrowWaitMost, ForceAt = Clock.Now + ForceRagdollAfter });
+        _throws.Add(new Throw { Thug = thug, Speed = speed, Until = Clock.Now + ThrowWaitMost, ForceAt = Clock.Now + ForceRagdollAfter, Most = frames });
     }
 
     private const double ThrownClear = 0.6;
@@ -600,6 +616,10 @@ internal sealed partial class Suit
         Vector3 at = Box(f.Thing).Centre;
         float hard = Math.Clamp(f.Fastest / (RamWreck * 1.5f), 0.2f, 1f);
         float radius = LandRadius * (0.6f + hard);
+        // Dust where it comes down, and a car hits with a crunch of metal.
+        Puff(Fx.Dust, at);
+        if (f.Kind is Kind.Car or Kind.Parked)
+            Sound(f.Thing, Fx.CarCrash);
         int hit = 0;
 
         foreach (RPawnVillain thug in Game.FindObjects<RPawnVillain>())

@@ -320,6 +320,8 @@ internal sealed class Control : Option
     public string? KeyText;
     public PadButton Button;
     public PadButton ButtonDefault;
+    // A button this row used to default to. Settings saved with it get the new default.
+    public PadButton Retired;
 
     public bool KeyFixed => KeyText != null;
 
@@ -341,7 +343,8 @@ internal sealed class Control : Option
     {
         Use.Foot => b is PadButton.RB or PadButton.RT or PadButton.LT or PadButton.Up or PadButton.Down or PadButton.Left or PadButton.Right,
         Use.Any => b is PadButton.Up or PadButton.Down or PadButton.Left or PadButton.Right,
-        Use.Flight => b is PadButton.A or PadButton.B or PadButton.X or PadButton.Y or PadButton.LB or PadButton.RB or PadButton.LS or PadButton.RS,
+        Use.Flight => b is PadButton.A or PadButton.B or PadButton.X or PadButton.Y or PadButton.LB or PadButton.RB or PadButton.LS or PadButton.RS
+            or PadButton.Up or PadButton.Left or PadButton.Right,
         _ => b is PadButton.A or PadButton.B or PadButton.X or PadButton.Y or PadButton.RB or PadButton.RT or PadButton.LT or PadButton.LS or PadButton.RS,
     };
 
@@ -373,7 +376,7 @@ internal sealed class Control : Option
         // A key can't be cleared in the menu, so a saved NONE is from before the row had a default.
         if (!KeyFixed && t.TryGetValue("key", out object? key) && key is string ks && Enum.TryParse(ks, true, out Keys parsed) && parsed != Keys.None)
             Key = parsed;
-        if (t.TryGetValue("pad", out object? pad) && pad is string ps && Enum.TryParse(ps, true, out PadButton b) && (b == PadButton.None || Fits(b)))
+        if (t.TryGetValue("pad", out object? pad) && pad is string ps && Enum.TryParse(ps, true, out PadButton b) && b != Retired && (b == PadButton.None || Fits(b)))
             Button = b;
     }
 

@@ -103,19 +103,19 @@ internal sealed partial class Suit
         // Stopped on something the trace can't see, like a car roof, he just drops out of flight.
         End("GROUND SLAM", fall: !onGround);
         if (onGround)
-            Safe.Run("slam landing", () => LandOnFeet(pawn, pc));
+            Safe.Run("slam landing", () => LandOnFeet(pawn, pc, Rig.SlamLandAnim, SlamLandAnims));
     }
 
     // Standing and walking again, with the landing played into his standing pose.
-    private void LandOnFeet(RPawnPlayer pawn, RPlayerController pc)
+    private void LandOnFeet(RPawnPlayer pawn, RPlayerController pc, string first, params string[] backups)
     {
         pawn.Velocity = Vector3.Zero;
         pawn.SetPhysics(Actor.EPhysics.PHYS_Walking, false);
         pc.GotoState(WalkState);
         pc.OnPlayerHasBeenMoved();
 
-        AnimSequence? seq = FindAnim(Rig.SlamLandAnim);
-        foreach (string name in SlamLandAnims)
+        AnimSequence? seq = FindAnim(first);
+        foreach (string name in backups)
             seq ??= FindAnim(name);
         if (seq is { IsValid: true })
             PlayIntoStand(pawn, seq);
@@ -134,6 +134,14 @@ internal sealed partial class Suit
         };
         pawn.ForceChangePose(StandMove, StandWeapon, default, false, transition, default, default, Length(seq));
     }
+
+    public bool Slamming => _flying && _slamming;
+
+    // How much of a sonic burst is left, 1 down to 0.
+    public float SurgeLeft => _flying ? _fm.Surge : 0f;
+
+    // Seconds before the sonic burst can be used again.
+    public double SonicWait => Math.Max(0.0, _sonicReady - Clock.Now);
 
     private bool CanSonic => _fm.Boosting && !_slamming && !Rushing && !Holding && Clock.Now >= _sonicReady;
 

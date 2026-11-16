@@ -19,14 +19,12 @@ internal static class Marks
 
         Rect(W * 0.5f - S(2), H * 0.5f - S(2), S(4), S(4), Palette.Hud, 0.7f);
 
-        // A heavy punch winding up fills a bar under the dot.
+        // A heavy punch winding up fills a ring round the dot, red once it's full.
         float charge = Suit.I.Charge;
         if (charge > 0f)
         {
-            float bw = S(56), bh = MathF.Max(1f, S(3));
-            float bx = W * 0.5f - bw * 0.5f, by = H * 0.5f + S(9);
-            Rect(bx, by, bw, bh, Palette.Dim, 0.5f);
-            Rect(bx, by, bw * charge, bh, charge >= 1f ? Palette.Caution : Palette.Hud, 0.9f);
+            Shapes.Arc(W * 0.5f, H * 0.5f, S(10), S(13), 0f, 360f, Palette.Dim, 0.5f);
+            Shapes.Arc(W * 0.5f, H * 0.5f, S(10), S(13), 270f, 270f + 360f * charge, charge >= 1f ? Palette.Caution : Palette.Hud, 0.9f);
         }
 
         Suit.Mark? aim = Suit.I.Aim;
@@ -46,8 +44,6 @@ internal static class Marks
 
         if (aim is { } target)
             Brackets(target);
-        else if (Suit.I.Holding)
-            TextCentre(W * 0.5f, H * 0.5f + S(28), HoldHint(" THROW"), Palette.Text, 0.42f, 0.9f);
     }
 
     private static void Brackets(Suit.Mark m)
@@ -75,15 +71,15 @@ internal static class Marks
         Rect(x1 - arm, y1 - t, arm, t, col);
         Rect(x1 - t, y1 - arm, t, arm, col);
 
-        TextCentre(cx, y0 - S(12), Name(m.Kind) + "  " + Fmt.Whole(m.Distance / 100f) + " M", Palette.Text, 0.44f);
+        TextCentre(cx, y0 - S(12), Name(m.Kind) + "  " + Fmt.Whole(m.Distance / 100f) + " M" + (Suit.I.AimFar ? "  FLY IN" : ""), Palette.Text, 0.44f);
         TextCentre(cx, y1 + S(12), Hint(m), Palette.Dim, 0.38f, 0.9f);
     }
 
     private static string Name(Suit.Kind kind) => kind switch
     {
         Suit.Kind.Thug => "THUG",
-        Suit.Kind.Car => "VEHICLE",
-        _ => "CAR",
+        Suit.Kind.Car or Suit.Kind.Parked => "VEHICLE",
+        _ => "OBJECT",
     };
 
     // Holding a thug, the punch key finishes him.

@@ -12,7 +12,7 @@ internal sealed partial class Suit
     private const float RagdollForceSeconds = 0.25f;
     private const float PunchSpeed = 1400f;
     private const float PunchUp = 0.35f;
-    private const int ThrowFrames = 3;
+    private const int ThrowFrames = 3, HeldThrowFrames = 10;
     private const double ThrowWaitMost = 1.5;
     // Force a ragdoll if the hit hasn't by then. Any sooner and it doesn't take.
     private const double ForceRagdollAfter = 0.2;
@@ -22,6 +22,7 @@ internal sealed partial class Suit
         public RPawnVillain Thug = null!;
         public Vector3 Speed;
         public int Frames;
+        public int Most = ThrowFrames;
         public double Until;
         public double ForceAt;
         public int Tries;
@@ -29,6 +30,8 @@ internal sealed partial class Suit
 
     private static readonly List<Throw> _throws = new();
     private static RPawnVillain? _forcing;
+    // Set while a held thug is hit, so he goes where Batman aims, not away from his side.
+    private static Vector3 _hitDir;
 
     // During his hits the game's ragdoll check says yes, the way a bat hit does.
     [Redirect(typeof(RPawnVillain), nameof(RPawnVillain.ShouldGoRagdoll))]
@@ -119,7 +122,8 @@ internal sealed partial class Suit
         Vector3 away = thug.Location - batman.Location;
         away.Z = 0f;
         Vector3 dir = away.LengthSquared() > 1f ? Vector3.Normalize(away) : Geo.Facing(batman.Rotation.Yaw);
-        Vector3 up = dir + Vector3.UnitZ * PunchUp;
+        bool aimed = _hitDir != Vector3.Zero;
+        Vector3 up = aimed ? Vector3.Normalize(_hitDir) : dir + Vector3.UnitZ * PunchUp;
         Vector3 push = up * (PunchPush * Opt.PunchForceNow);
 
         // Keep a harder push the hit already had, like the ram's at speed.
@@ -133,7 +137,7 @@ internal sealed partial class Suit
         // The game's own ragdoll launch from its big hits, applied once the body is live.
         info.RagdollForce = push;
         info.RagdollForceDuration = RagdollForceSeconds;
-        info.ARF = RPawnCombat.AdditionalRagdollForce.ARF_HeadBackFeetUp;
+        info.ARF = aimed ? RPawnCombat.AdditionalRagdollForce.ARF_None : RPawnCombat.AdditionalRagdollForce.ARF_HeadBackFeetUp;
 
         info.Impulse = push;
         info.ForceHitReactionHeading = push;
@@ -172,7 +176,7 @@ internal sealed partial class Suit
 
             mesh.WakeRigidBody();
             mesh.SetRBLinearVelocity(t.Speed, false);
-            if (++t.Frames >= ThrowFrames)
+            if (++t.Frames >= t.Most)
                 _throws.RemoveAt(i);
         }
     }

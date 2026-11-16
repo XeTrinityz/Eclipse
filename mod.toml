@@ -1,5 +1,5 @@
 name = "Eclipse"
 author = "XeTrinityz"
-version = "2.0.1"
+version = "2.1.0"
 description = "Two heroes for Batman. As Superman he flies, stops cars dead, punches them across the street and burns through thugs with heat vision. As the Flash he runs at super speed, throws lightning, blitzes a whole crowd, slows time and rewinds. Plays on keyboard or controller. Press F3 or hold the MENU button to pick a hero, change his controls and his suit."
 assembly = "Eclipse.dll"

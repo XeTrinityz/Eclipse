@@ -23,6 +23,8 @@ internal enum Act
     Flurry,
     Slow,
     Rewind,
+    SideLeft,
+    SideRight,
 }
 
 // Every control the mod reads, by what it does rather than which key or button it's on. Presses are counted
