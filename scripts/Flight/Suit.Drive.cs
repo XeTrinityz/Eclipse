@@ -10,6 +10,8 @@ internal sealed partial class Suit
 {
     private const float BlockedBy = 1f;
     private const float StepUp = 35f;
+    private const float HeadingFrom = 100f;
+    private const float Heading = 12f;
 
     private static readonly Vector3[] Axes = { Vector3.UnitZ, Vector3.UnitX, Vector3.UnitY };
 
@@ -79,8 +81,12 @@ internal sealed partial class Suit
 
         _at = pawn.Location;
 
-        // Kept at zero, or the standing pose plays walk and run cycles in mid air.
-        pawn.Velocity = Vector3.Zero;
+        // Kept near zero, or the standing pose plays walk and run cycles in mid air. The city only
+        // sends street crowds ahead of a pawn whose own velocity shows a heading, and with none
+        // the streets empty while he flies. So while he flies fast the pawn holds a speed just
+        // past the 10 the game asks for, along his heading.
+        var level = new Vector3(_fm.Velocity.X, _fm.Velocity.Y, 0f);
+        pawn.Velocity = level.Length() > HeadingFrom ? Vector3.Normalize(level) * Heading : Vector3.Zero;
         pawn.Acceleration = Vector3.Zero;
     }
 
