@@ -31,7 +31,9 @@ moving.
 
 **Fighting in the air.** **X** or left click punches the bracketed thug or vehicle, flying to it first if it's out of
 reach. Tap to keep punching, hold to wind up a heavy punch with a shockwave. **Y** or right click picks it up, cars
-included. Press it again to throw it where you look, or **X** to finish a thug in your hand.
+included. Press it again to throw it where you look, or **X** to finish a thug in your hand. A grabbed thug goes limp
+and hangs from his hand by the neck. The combat page can change the part he holds, like the leg to hang him upside
+down, or go back to the old animation hold.
 
 **Heat vision.** Hold **RT** on foot or **LB** in flight, or middle mouse. Thugs and cars it touches are destroyed
 and it leaves fire where it rests.
