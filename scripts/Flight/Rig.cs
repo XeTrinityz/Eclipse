@@ -6,9 +6,10 @@ internal static class Rig
     // Both arms up over his head, from the ledge climb. For cars and objects.
     public const string HoldAnim = "Dangle_Climb_Up_Over_128";
     public const string ThrowAnim = "Thug_Grab_Player_Strike_Out_Throw";
-    // The interrogation grab and hold. The thug plays his own side of the same pair.
+    // The interrogation grab and hold.
     public const string GrabAnim = "Ledge_In";
     public const string NeckAnim = "Ledge_Idle";
+    // The thug plays his own side of the same pair, for the animation hold.
     public const string ThugGrabSide = "Ledge_In";
     public const string ThugHoldSide = "Ledge_Idle";
     // The dive bomb landing, for coming out of a ground slam.
@@ -34,6 +35,7 @@ internal static class Rig
     public const float GripDrop = 0f;
     public const float GripPitch = 0f;
     public const float GripRoll = -5f;
+    // The animation hold only.
     public const float GripYaw = 150f;
     public const float GripThugPitch = 5f;
 }

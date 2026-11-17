@@ -501,6 +501,7 @@ internal sealed partial class Suit
 
     public void WorldChanged()
     {
+        ForgetGrip();
         End("WORLD CHANGED", fall: false);
         Safe.Run("run end", () => EndRun(RunEnd.Stop));
         Safe.Run("passing off", EndPassing);

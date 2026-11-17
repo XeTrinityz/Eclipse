@@ -75,7 +75,8 @@ internal sealed partial class Suit
         // Flying or running, his bones are still where they were before this frame's move.
         if ((_flying || _running) && pawn.Mesh is { IsValid: true } mesh)
         {
-            pawn.ForceUpdateComponents(false, false);
+            // Transform only while a thug is held, a full update drops him off the handle.
+            pawn.ForceUpdateComponents(false, HoldingThug);
             mesh.ForceSkelUpdate();
         }
 

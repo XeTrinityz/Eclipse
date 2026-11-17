@@ -342,12 +342,17 @@ internal sealed partial class Suit
     {
         s.Landed = true;
         _fovKick = MathF.Max(_fovKick, s.Heavy ? 14f : 6f);
-        if (s.Target is not { IsValid: true, bDeleteMe: false } thing || !Usable(thing, s.Kind))
+        if (s.Target is not { IsValid: true, bDeleteMe: false } thing)
+            return;
+
+        // The thug in his hand is a ragdoll on a handle and can swing out of reach, but he's always hit.
+        bool inHand = IsHeld(thing);
+        if (!inHand && !Usable(thing, s.Kind))
             return;
 
         float gap = Gap(pawn, thing, out Vector3 to);
         float dist = to.Length();
-        if (gap > PunchReach * MissPast)
+        if (!inHand && gap > PunchReach * MissPast)
             return;
 
         Vector3 dir = dist > 1f ? to / dist : s.Dir;

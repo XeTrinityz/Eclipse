@@ -20,6 +20,8 @@ internal static class Opt
     public static Switch NoHit = null!;
     public static Switch NoStun = null!;
     public static Pick SuperPunch = null!;
+    public static Pick HoldStyle = null!;
+    public static Pick HoldPart = null!;
     public static Dial PunchForce = null!;
     public static Dial PowerForce = null!;
 
@@ -161,6 +163,10 @@ internal static class Opt
             "How long a punch takes in flight. The fist lands half way through. Shorter is snappier, longer is easier to see.");
         HitStop = Add(combat, "hit_stop", "HIT STOP", true,
             "Each punch that lands in flight slows the game for a blink, longer on a heavy one. A ground slam does it too.");
+        HoldStyle = Add(combat, "hold_style", "THUG HOLD", new[] { "ragdoll", "animation" }, new[] { "RAGDOLL", "ANIMATION" },
+            "How he holds a thug. RAGDOLL knocks him limp and carries him on a physics handle. ANIMATION keeps him standing in a grab animation.");
+        HoldPart = Add(combat, "hold_part", "HOLD PART", new[] { "neck", "chest", "hips", "leg" }, new[] { "NECK", "CHEST", "HIPS", "LEG" },
+            "Where he takes hold of a ragdolled thug. LEG hangs him upside down. Only for the ragdoll hold.");
         TargetMarks = Add(combat, "target_marks", "TARGET MARKS", true,
             "While flying, brackets the thug or vehicle nearest the middle of the screen, with what punch and grab do to it.");
 

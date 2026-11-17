@@ -317,15 +317,13 @@ internal sealed partial class Suit
 
         if (thing is RPawnVillain thug)
         {
-            // Knocked down while in hand, he's let go rather than carried as a ragdoll.
-            if (thug.IsRagdoll() || !ThugUp(thug))
+            // Let go if he's dead or got himself up out of the hold.
+            if (!ThugUp(thug) || !GripStep(pawn, thug))
             {
                 Ungrip();
                 _held = null;
-                return;
             }
 
-            GripStep(pawn, thug);
             return;
         }
 
@@ -361,36 +359,20 @@ internal sealed partial class Suit
 
         if (thing is RPawnVillain thug)
         {
-            // Sent off through the game's hit so his ragdoll knocks people over, then given throw speed.
-            Ungrip();
-            var info = new RPawnCombat.FDamageInfo
-            {
-                Attacker = pawn,
-                DamageAmount = 1f,
-                Impulse = v,
-                ForceHitReactionHeading = v,
-                RagdollForce = v,
-                RagdollForceDuration = 0.25f,
-                // The game's extra fling pushes him away from Batman, not where you aim, so none here.
-                ARF = RPawnCombat.AdditionalRagdollForce.ARF_None,
-                DamageType = RDmgType_BaseballBat.StaticClass(),
-                bHeavyHit = true,
-                bWillKnockOverOtherPawns = true,
-            };
-            // The super punch on this hit would aim him away from Batman's side. It follows the throw instead.
-            _hitDir = v;
-            try
-            {
-                Safe.Run("throw hit", () => thug.DamagedBy(info));
-            }
-            finally
-            {
-                _hitDir = Vector3.Zero;
-            }
+            // He's a ragdoll already, so he's let go and sent off the way Knightfall's grab throws. A hit on top of
+            // that restarted his ragdoll and snapped him back towards where he was taken.
+            Ungrip(GripThrowStun);
             if (!thug.IsRagdoll())
                 thug.GenericGoRagdoll();
-            // Held to the aim for longer than a punch, so nothing knocks him off line as he leaves the hand.
+            // Held to the aim for a few frames, so nothing knocks him off line as he leaves the hand.
             QueueThrow(thug, v, HeldThrowFrames);
+            if (thug.Mesh is { IsValid: true } body)
+            {
+                body.WakeRigidBody();
+                body.SetRBLinearVelocity(v, false);
+            }
+
+            Log.Info("Threw a thug at " + (int)v.Length() + ".");
             _threwAt = Clock.Now;
         }
         else
@@ -522,11 +504,11 @@ internal sealed partial class Suit
                     break;
                 case RDestructibleProp prop when prop.Health > 0:
                     f.Hit.Add(prop.Ptr);
+                    BreakProp(prop, batman, pc, dir, force, hard, centre);
+                    break;
                 case not null when IsDrone(thing) && DroneUp(thing):
                     f.Hit.Add(thing.Ptr);
                     Wreck(thing, batman, pc, centre, dir);
-                    break;
-                    BreakProp(prop, batman, pc, dir, force, hard, centre);
                     break;
                 case RVehicle car when car.Health > 0:
                     f.Hit.Add(car.Ptr);

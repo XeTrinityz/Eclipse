@@ -177,7 +177,11 @@ internal sealed partial class Suit
             mesh.WakeRigidBody();
             mesh.SetRBLinearVelocity(t.Speed, false);
             if (++t.Frames >= t.Most)
+            {
+                if (t.Most >= HeldThrowFrames)
+                    Log.Info("Thrown thug is at " + (int)mesh.GetRBLinearVelocity().Length() + " of " + (int)t.Speed.Length() + ".");
                 _throws.RemoveAt(i);
+            }
         }
     }
 
