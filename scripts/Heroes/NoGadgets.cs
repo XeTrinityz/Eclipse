@@ -35,8 +35,14 @@ internal static class NoGadgets
             _held = true;
         }
 
+        // The first value seen can be the game's own short lock, like at a load or a cutscene. If it's turned
+        // back on while held, that's what the game wants, so that's what goes back. Otherwise the gadgets
+        // stayed off after powers until a restart.
         if (!info.bNoGadgets)
+        {
+            Shared.Set(WasKey, false);
             info.bNoGadgets = true;
+        }
 
         if (Heroes.Is(Hero.Flash))
         {
@@ -47,7 +53,10 @@ internal static class NoGadgets
             }
 
             if (!info.bNoGrapple)
+            {
+                Shared.Set(GrappleKey, false);
                 info.bNoGrapple = true;
+            }
             HoldGlide();
         }
         else
@@ -83,9 +92,16 @@ internal static class NoGadgets
         }
 
         if (!pc.bCapeGlideDisabled)
+        {
+            Shared.Set(GlideKey, false);
             pc.bCapeGlideDisabled = true;
+        }
+
         if (pawn.bCanCapeGlide)
+        {
+            Shared.Set(CapeKey, true);
             pawn.bCanCapeGlide = false;
+        }
     }
 
     private static void ReleaseGlide()

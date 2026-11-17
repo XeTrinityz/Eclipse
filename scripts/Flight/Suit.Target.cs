@@ -1,6 +1,7 @@
 using System.Numerics;
 using BmSDK;
 using BmSDK.BmGame;
+using BmSDK.BmScript;
 using BmSDK.Engine;
 
 namespace Trinity.Eclipse;
@@ -32,6 +33,7 @@ internal sealed partial class Suit
         Parked,
         Prop,
         Thing,
+        Drone,
     }
 
     internal readonly record struct Mark(Actor Thing, Kind Kind, Vector3 Centre, Vector3 Half, float Distance);
@@ -201,7 +203,15 @@ internal sealed partial class Suit
         foreach (RVehicle car in Game.FindObjects<RVehicle>())
         {
             if (car is { IsValid: true, IsClassDefaultObject: false } and not RVehicleBatmobileBase && Vector3.DistanceSquared(car.Location, at) < reach)
-                _near.Add((car, Kind.Car));
+                _near.Add((car, car is RVehicleFlying ? Kind.Drone : Kind.Car));
+        }
+
+        // Only the small ones. The big helicopters are story pieces.
+        foreach (RHelicopterBase heli in Game.FindObjects<RHelicopterBase>())
+        {
+            if (heli is RPredatorDrone or RPredatorDroneMini && heli is { IsValid: true, IsClassDefaultObject: false }
+                && Vector3.DistanceSquared(heli.Location, at) < reach)
+                _near.Add((heli, Kind.Drone));
         }
 
         _near.AddRange(_still);
@@ -230,6 +240,18 @@ internal sealed partial class Suit
             if (prop is { IsValid: true, IsClassDefaultObject: false } && Vector3.DistanceSquared(prop.Location, at) < propReach)
                 _still.Add((prop, Kind.Prop));
         }
+
+        foreach (RSentryGunBase sentry in Game.FindObjects<RSentryGunBase>())
+        {
+            if (sentry is { IsValid: true, IsClassDefaultObject: false } && Vector3.DistanceSquared(sentry.Location, at) < reach)
+                _still.Add((sentry, Kind.Drone));
+        }
+
+        foreach (RTurretBase turret in Game.FindObjects<RTurretBase>())
+        {
+            if (turret is { IsValid: true, IsClassDefaultObject: false } && Vector3.DistanceSquared(turret.Location, at) < reach)
+                _still.Add((turret, Kind.Drone));
+        }
     }
 
     // Still there and worth hitting. A downed thug can't be punched or grabbed, so he'd only block the next one.
@@ -244,6 +266,7 @@ internal sealed partial class Suit
             Kind.Car => thing is RVehicle { Health: > 0 },
             Kind.Parked => thing is not RAbandonedVehicle { Health: <= 0 },
             Kind.Prop => thing is RDestructibleProp { Health: > 0 } prop && prop.bBlockActors,
+            Kind.Drone => DroneUp(thing),
             _ => true,
         };
     }
@@ -254,7 +277,7 @@ internal sealed partial class Suit
     private static bool Punchable(Mark mark) => mark.Kind != Kind.Thug || ThugUp((RPawnVillain)mark.Thing);
 
     // Only grabbed on his feet. Grabbing a ragdoll broke both of them.
-    private static bool Grabbable(Mark mark) =>
+    internal static bool Grabbable(Mark mark) =>
         mark.Kind is Kind.Car or Kind.Parked or Kind.Thing || (mark.Kind == Kind.Thug && mark.Thing is RPawnVillain thug && ThugUp(thug) && !thug.IsRagdoll());
 
     // Middle and half size. His cylinder while standing, his body's bounds as a ragdoll.

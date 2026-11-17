@@ -522,6 +522,10 @@ internal sealed partial class Suit
                     break;
                 case RDestructibleProp prop when prop.Health > 0:
                     f.Hit.Add(prop.Ptr);
+                case not null when IsDrone(thing) && DroneUp(thing):
+                    f.Hit.Add(thing.Ptr);
+                    Wreck(thing, batman, pc, centre, dir);
+                    break;
                     BreakProp(prop, batman, pc, dir, force, hard, centre);
                     break;
                 case RVehicle car when car.Health > 0:

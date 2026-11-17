@@ -71,14 +71,15 @@ internal static class Marks
         Rect(x1 - arm, y1 - t, arm, t, col);
         Rect(x1 - t, y1 - arm, t, arm, col);
 
-        TextCentre(cx, y0 - S(12), Name(m.Kind) + "  " + Fmt.Whole(m.Distance / 100f) + " M" + (Suit.I.AimFar ? "  FLY IN" : ""), Palette.Text, 0.44f);
+        TextCentre(cx, y0 - S(12), Name(m) +"  " + Fmt.Whole(m.Distance / 100f) + " M" + (Suit.I.AimFar ? "  FLY IN" : ""), Palette.Text, 0.44f);
         TextCentre(cx, y1 + S(12), Hint(m), Palette.Dim, 0.38f, 0.9f);
     }
 
-    private static string Name(Suit.Kind kind) => kind switch
+    private static string Name(Suit.Mark m) => m.Kind switch
     {
         Suit.Kind.Thug => "THUG",
         Suit.Kind.Car or Suit.Kind.Parked => "VEHICLE",
+        Suit.Kind.Drone => m.Thing is BmSDK.BmGame.RSentryGunBase or BmSDK.BmGame.RTurretBase ? "TURRET" : "DRONE",
         _ => "OBJECT",
     };
 
@@ -94,6 +95,6 @@ internal static class Marks
         string punch = Said(Act.Punch) + " PUNCH, HOLD FOR HEAVY";
         if (Suit.I.Holding)
             return HoldHint(" THROW AT IT");
-        return punch + "   " + Said(Act.Grab) + " GRAB";
+        return Suit.Grabbable(m) ? punch + "   " + Said(Act.Grab) + " GRAB" : punch;
     }
 }

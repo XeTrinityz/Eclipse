@@ -155,8 +155,9 @@ internal sealed partial class Suit
         Vector3 bestEnd = default;
         foreach ((Actor thing, Kind kind) in _near)
         {
-            // A thug already down would only soak up the beam.
-            if (kind != Kind.Thug || IsHeld(thing) || thing is not RPawnVillain thug || !OnFeet(thug))
+            // A thug already down would only soak up the beam. Drones are small, so they get the same slack.
+            bool standing = kind == Kind.Thug && thing is RPawnVillain thug && OnFeet(thug);
+            if (IsHeld(thing) || !(standing || (kind == Kind.Drone && DroneUp(thing))))
                 continue;
 
             (Vector3 centre, Vector3 half) = Box(thing);
@@ -279,6 +280,13 @@ internal sealed partial class Suit
                 if (thug.Mesh is { IsValid: true } body && FindBone(body, "chest", SpineBones, "Spine", "Pelvis") is { } spine)
                     Fx.SpawnOn(Fx.BodyFire, body, spine);
                 Fx.Play(thug, Fx.BurnSound);
+                break;
+
+            case not null when IsDrone(hit):
+                if (!DroneUp(hit))
+                    return;
+                Wreck(hit, pawn, pc, at, dir);
+                loud = false;
                 break;
 
             case RVehicle { Health: <= 0 } burnt:

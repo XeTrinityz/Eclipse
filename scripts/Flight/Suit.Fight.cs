@@ -413,6 +413,10 @@ internal sealed partial class Suit
             case RPawnVillain thug:
                 PunchThug(thug, pawn, pc, dir, force, heavy, hard, out flung);
                 break;
+            case not null when kind == Kind.Drone:
+                Wreck(thing, pawn, pc, at, dir);
+                flung = false;
+                break;
             // A driven car only takes the knock and damage. Unpinning it threw the passengers about.
             case RVehicle driven when driven.Driver is { IsValid: true } || driven.bDriving:
                 PunchDriven(driven, pawn, pc, dir, force, heavy, at);
@@ -527,6 +531,9 @@ internal sealed partial class Suit
                 RamThug(thug, pawn, pc, dir, force, 1f, thug.Location);
                 QueueThrow(thug, (dir + Vector3.UnitZ * thugUp) * thugThrow);
                 break;
+            case not null when kind == Kind.Drone:
+                Wreck(thing, pawn, pc, centre, dir);
+                break;
             // A driven car only gets the knock and damage, unpinning it threw the passengers about.
             case RVehicle driven when driven.Driver is { IsValid: true } || driven.bDriving:
                 PunchDriven(driven, pawn, pc, dir, force, hard >= 1f, centre);
@@ -549,7 +556,7 @@ internal sealed partial class Suit
         }
 
         _rammed[thing.Ptr] = Clock.Now;
-        if (kind != Kind.Prop)
+        if (kind is not (Kind.Prop or Kind.Drone))
             Fling(thing, kind);
     }
 

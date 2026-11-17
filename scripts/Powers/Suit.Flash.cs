@@ -1405,7 +1405,7 @@ internal sealed partial class Suit
             Vector3 off = Box(thing).Centre - _eye;
             off.Z = 0f;
             float dist = off.Length();
-            if (dist > TornadoReach || dist < 1f || !Usable(thing, kind) || kind == Kind.Prop)
+            if (dist > TornadoReach || dist < 1f || !Usable(thing, kind) || kind is Kind.Prop or Kind.Drone)
                 continue;
 
             Vector3 around = new Vector3(-off.Y, off.X, 0f) / dist * _tornadoSide;

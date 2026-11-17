@@ -209,6 +209,15 @@ internal sealed partial class Suit
         else if (hit is Pawn { Base: Vehicle { IsValid: true } carried })
             hit = carried;
 
+        // Drones and guns only go on a fast hit. Waking a flying one's physics dropped it out of the sky.
+        if (IsDrone(hit))
+        {
+            if (!fast || !DroneUp(hit))
+                return false;
+            Wreck(hit, pawn, pc, at, dir);
+            return true;
+        }
+
         // Slow hits leave loose things for his body to shove. Parked cars are woken so the shove works.
         if (!fast && Loose(hit))
         {
